@@ -4,7 +4,15 @@ Heavily based on Haskell implemention by David Peter.
 David's implementation at https://github.com/sharkdp/yinsh/tree/master
 Rules of Yinsh at https://www.boardspace.net/yinsh/english/rules.htm
 """
+from copy import deepcopy
+from dataclasses import dataclass, field
 from math import sqrt
+from typing import List, Tuple, Union
+
+
+def default_field(obj):
+    return field(default_factory=lambda: deepcopy(obj))
+
 
 MAX_MARKERS = 51
 
@@ -112,38 +120,47 @@ class GameBoard:
         self.add_element(coordinate, new_element)
 
 
-class YinshGame:
-    def __init__(self, points_to_win=3):
-        # = [
-        #     setup new rings,  # add a ring
-        #     add marker,  # add a marker in ring
-        #     move ring,  # move ring at given position
-        #     remove run # remove one of a platers run(s), param is last player that moved a ring
-        #     remove_ring(player),  # remove one ring
-        # ]
-        self.turn_type = "setup new rings"
-        self.active_player = 0
-        self.board = GameBoard()
-        self.points = [0, 0]
-        self.points_to_win = points_to_win
+@dataclass
+class GameState:
+    turn_type: str = "setup new rings"
+    active_player: int = 0
+    board: GameBoard = GameBoard()
+    points: List[int] = default_field([0, 0])
+    points_to_win: int = 3
+    valid_moves: Union[
+        List[Tuple[int, int]], List[List[Tuple[int, int]]]
+    ] = default_field(coords)
+    last_moved: int = 0
+    prev_ring: Tuple[int, int] = (0, 0)
+    max_markers_before_draw: int = MAX_MARKERS
+    terminal: bool = False
 
-        self.valid_moves = coords
-        # self.prev_state_list = []
-        # self.prev_move_list = []
-        self.last_moved = (
-            0  # used to keep track of next active player if multiple runs removed
-        )
-        self.prev_move = (0, 0)
+
+class YinshGame:
+    def __init__(self, game_state=GameState()):
+        self.turn_type: str = game_state.turn_type
+        self.active_player: int = game_state.active_player
+        self.board: GameBoard = game_state.board
+        self.points: List[int] = game_state.points
+        self.points_to_win: int = game_state.points_to_win
+        self.valid_moves: List = game_state.valid_moves
+        self.last_moved: int = game_state.last_moved
+        self.prev_ring: Tuple[int, int] = game_state.prev_ring
+        self.max_markers_before_draw: int = game_state.max_markers_before_draw
+        self.terminal: bool = game_state.terminal
 
     def get_game_state(self):
-        return (
+        return GameState(
             self.turn_type,
             self.active_player,
             self.board,
             self.points,
+            self.points_to_win,
             self.valid_moves,
-            self.prev_move,
-            self.terminal(),
+            self.last_moved,
+            self.prev_ring,
+            self.max_markers_before_draw,
+            self.terminal,
         )
 
     def get_markers(self, player):
@@ -321,12 +338,12 @@ class YinshGame:
         elif self.turn_type == "add marker":
             # move assumed to be single coord of active player's ring
             self.board.modify_element(move, ("marker", self.active_player))
-            self.prev_move = move
+            self.prev_ring = move
         elif self.turn_type == "move ring":
             # move is a valid position for the ring to move which was just replaced by a marker
             self.last_moved = self.active_player
             self.board.add_element(move, ("ring", self.active_player))
-            self.flip_markers_along_line(self.prev_move, move)
+            self.flip_markers_along_line(self.prev_ring, move)
         elif self.turn_type == "remove run":
             # move assumed to be a lsit of five coords in a row
             self.remove_run(move)

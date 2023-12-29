@@ -72,13 +72,13 @@ def highlight_human_move(valid_moves, screen, turn_type, active_player):
         move = closest_coord(*pygame.mouse.get_pos())
         if move in valid_moves:
             draw_move(move, turn_type, active_player, HIGHLIGHT, screen)
-            return True
+            return True, move
     else:
         # turn_type == "remove run", move is list of 5 markers instead of coord
         move = get_remove_run_from_mouse(valid_moves)
         if move:
             draw_move(move, turn_type, active_player, HIGHLIGHT, screen)
-            return True
+            return True, move
     return False, move
 
 
@@ -86,6 +86,17 @@ def make_valid_move(yinsh_game, valid_move):
     # non valid moves are cheating and may break the game
     yinsh_game.take_turn(valid_move)
     yinsh_game.setup_next_turn_and_player()
+
+
+def draw_valid_moves(valid_moves, turn_type, active_player, screen):
+    for move in valid_moves:
+        draw_move(move, turn_type, active_player, VALID, screen)
+
+
+def draw_pieces_on_board(board, screen):
+    for coord, element in board.elements.items():
+        piece = Piece(coord, element[1], element[0])
+        piece.draw(screen)
 
 
 # -- | Get the exact board coordinate which is closest to the given screen coordinate.
@@ -112,14 +123,11 @@ def draw_grid(screen):
                 pygame.draw.aaline(screen, "black", pgvec(coord), pgvec(coord2))
 
 
-def make_game_text(
+def draw_game_text(
     screen,
     turn_type,
     active_player,
-    board,
     points,
-    valid_moves,
-    prev_move,
     terminal,
 ):
     # print text above game state
@@ -193,7 +201,6 @@ def play_game(player1, player2, delay: int = 1):
     players = [player1, player2]
 
     already_highlighted = False
-    # try:
     while running:
         # poll for events
         # pygame.QUIT event means the user clicked X to close your window
@@ -208,81 +215,50 @@ def play_game(player1, player2, delay: int = 1):
         draw_background(screen)
 
         # get the game state
-        (
-            turn_type,
-            active_player,
-            board,
-            points,
-            valid_moves,
-            prev_move,
-            terminal,
-        ) = yinsh_game.get_game_state()
-        player = players[active_player]
-        make_game_text(
-            screen,
-            turn_type,
-            active_player,
-            board,
-            points,
-            valid_moves,
-            prev_move,
-            terminal,
-        )
+        gs = yinsh_game.get_game_state()
+        player = players[gs.active_player]
+        draw_game_text(screen, gs.turn_type, gs.active_player, gs.points, gs.terminal)
 
-        if not terminal:
-            for move in valid_moves:
-                draw_move(move, turn_type, active_player, VALID, screen)
-
-        # draw board lines
+        # draw valid moves (under board grid)
+        if not gs.terminal:
+            draw_valid_moves(gs.valid_moves, gs.turn_type, gs.active_player, screen)
+        # draw board grid
         draw_grid(screen)
-
         # draw all the pieces ACTUALLY on the board
-        for coord, element in board.elements.items():
-            piece = Piece(coord, element[1], element[0])
-            piece.draw(screen)
+        draw_pieces_on_board(gs.board, screen)
 
-        if not terminal:
-            if players[active_player] is None:
+        # highlight and make selected move if applicable
+        pygame.display.flip()
+        if not gs.terminal:
+            if players[gs.active_player] is None:
                 # highlight the move that the mouse is hovering over if it's a valid
                 # make that move if it's also clicked
                 valid, move = highlight_human_move(
-                    valid_moves, screen, turn_type, active_player
+                    gs.valid_moves, screen, gs.turn_type, gs.active_player
                 )
                 if valid and clicked:
                     make_valid_move(yinsh_game, move)
                 pygame.display.flip()
             else:
                 if not already_highlighted:
-                    move = player.make_move(valid_moves)
-                    draw_move(move, turn_type, active_player, HIGHLIGHT, screen)
+                    time.sleep(1 * delay / 3)
+                    move = player.make_move(gs.valid_moves)
+                    draw_move(move, gs.turn_type, gs.active_player, HIGHLIGHT, screen)
                     already_highlighted = True
                     pygame.display.flip()
+                    time.sleep(2 * delay / 3)
                 else:
-                    time.sleep(delay)
+                    draw_move(move, gs.turn_type, gs.active_player, HIGHLIGHT, screen)
                     make_valid_move(yinsh_game, move)
                     already_highlighted = False
-                    pygame.display.flip()
-        # flip() the display to put your work on screen
-        pygame.display.flip()
-    # except OSError as e:
-    #     print(e)
-    #     print(f'turn_type = "{turn_type}"')
-    #     print(f"active_player = {active_player}")
-    #     print(f"board.elements = {board.elements}")
-    #     print(f"board.markers = {board.markers}")
-    #     print(f"board.rings = {board.rings}")
-    #     print(f"points = {points}")
-    #     print(f"valid_moves = {valid_moves}")
-    #     print(f"prev_move = {prev_move}")
-    #     pygame.quit()
-    print(f'turn_type = "{turn_type}"')
-    print(f"active_player = {active_player}")
+    print(f'turn_type = "{gs.turn_type}"')
+    print(f"active_player = {gs.active_player}")
     print(f"board.elements = {board.elements}")
     print(f"board.markers = {board.markers}")
     print(f"board.rings = {board.rings}")
-    print(f"points = {points}")
-    print(f"valid_moves = {valid_moves}")
-    print(f"prev_move = {prev_move}")
+    print(f"points = {gs.points}")
+    print(f"valid_moves = {gs.valid_moves}")
+    print(f"prev_move = {gs.prev_move}")
     pygame.quit()
 
 
