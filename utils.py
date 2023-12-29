@@ -4,17 +4,17 @@ Coordinate = Tuple[int]
 
 # Color theme (http://www.colourlovers.com/palette/15/tech_light)
 # RGB
-green = (247, 165, 121)  # (209, 231, 81)
-blue = (149, 103, 224)  # (38, 173, 228)
+p2_color = (247, 165, 121)  # orange # (209, 231, 81) # green
+p1_color = (149, 103, 224)  # purple # (38, 173, 228) # blue
 white = (255, 255, 255)
 hl = (255, 0, 0, 0.5)
 black = (0, 0, 0)
 
-gh = [(g + w) / 2 for g, w in zip(green, white)]
-bh = [(b + w) / 2 for b, w in zip(blue, white)]
+h1 = [(g + w) / 2 for g, w in zip(p1_color, white)]
+h2 = [(b + w) / 2 for b, w in zip(p2_color, white)]
 
-gv = [(g + 3 * w) / 4 for g, w in zip(green, white)]
-bv = [(b + 3 * w) / 4 for b, w in zip(blue, white)]
+v1 = [(g + 3 * w) / 4 for g, w in zip(p2_color, white)]
+v2 = [(b + 3 * w) / 4 for b, w in zip(p1_color, white)]
 
 
 # Dimensions

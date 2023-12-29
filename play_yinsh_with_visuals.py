@@ -8,6 +8,7 @@ import pygame
 
 # from utils import *
 from pieces import Piece
+from utils import *
 from yinsh import *
 from random_bot import UniformRandomPlayer
 
@@ -55,13 +56,15 @@ def make_game_text(
     font2 = pygame.font.SysFont("chalkduster.ttf", 42)
     if not terminal:
         player_turn_text = font1.render(
-            f"Player {active_player+1}'s turn", True, [blue, green][active_player]
+            f"Player {active_player+1}'s turn",
+            True,
+            [p1_color, p2_color][active_player],
         )
         player_turn_text2 = font2.render(
             f"Player {active_player+1}'s turn", True, black
         )
         turn_type_text = font1.render(
-            f"{turn_type}", True, [blue, green][active_player]
+            f"{turn_type}", True, [p1_color, p2_color][active_player]
         )
         turn_type_text2 = font2.render(f"{turn_type}", True, black)
     else:
@@ -69,15 +72,17 @@ def make_game_text(
             winner = 1
         else:
             winner = 2
-        player_turn_text = font1.render(f"Game over,", True, [blue, green][winner - 1])
+        player_turn_text = font1.render(
+            f"Game over,", True, [p1_color, p2_color][winner - 1]
+        )
         player_turn_text2 = font2.render(f"Game over,", True, black)
         turn_type_text = font1.render(
-            f"Player {winner} wins!", True, [blue, green][winner - 1]
+            f"Player {winner} wins!", True, [p1_color, p2_color][winner - 1]
         )
         turn_type_text2 = font2.render(f"Player {winner} wins!", True, black)
-    p1_points_text = font1.render(f"p1 points: {points[0]}", True, blue)
+    p1_points_text = font1.render(f"p1 points: {points[0]}", True, p1_color)
     p1_points_text2 = font2.render(f"p1 points: {points[0]}", True, black)
-    p2_points_text = font1.render(f"p2 points: {points[1]}", True, green)
+    p2_points_text = font1.render(f"p2 points: {points[1]}", True, p2_color)
     p2_points_text2 = font1.render(f"p2 points: {points[1]}", True, black)
 
     # display text shadow

@@ -30,7 +30,7 @@ class Piece(pygame.sprite.Sprite):
         self.draw_coord = screen_point(*self.coord)
 
     def get_color(self):
-        return ([[blue, bh, bv], [green, gh, gv]][self.player])[self.highlight]
+        return ([[p1_color, h1, v1], [p2_color, h2, v2]][self.player])[self.highlight]
 
     def draw(self, screen):
         if self.piece_type == "ring":
