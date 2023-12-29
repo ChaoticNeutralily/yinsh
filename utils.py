@@ -13,8 +13,8 @@ black = (0, 0, 0)
 h1 = [(g + w) / 2 for g, w in zip(p1_color, white)]
 h2 = [(b + w) / 2 for b, w in zip(p2_color, white)]
 
-v1 = [(g + 3 * w) / 4 for g, w in zip(p2_color, white)]
-v2 = [(b + 3 * w) / 4 for b, w in zip(p1_color, white)]
+v1 = [(b + 3 * w) / 4 for b, w in zip(p1_color, white)]
+v2 = [(g + 3 * w) / 4 for g, w in zip(p2_color, white)]
 
 
 # Dimensions

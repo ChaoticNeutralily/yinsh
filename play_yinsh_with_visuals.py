@@ -7,7 +7,7 @@ import time
 import pygame
 
 # from utils import *
-from pieces import Piece
+from pieces import Piece, screen_point
 from utils import *
 from yinsh import *
 from random_bot import UniformRandomPlayer
@@ -35,7 +35,7 @@ def draw_background(screen):
 
 def draw_grid(screen):
     for coord in coords:
-        pygame.draw.circle(screen, black, pgvec(coord), 1)
+        pygame.draw.circle(screen, black, coord, 1)
         for coord2 in coords:
             if adjacent(coord, coord2):
                 pygame.draw.aaline(screen, "black", pgvec(coord), pgvec(coord2))
@@ -68,18 +68,27 @@ def make_game_text(
         )
         turn_type_text2 = font2.render(f"{turn_type}", True, black)
     else:
-        if points[0] == max(points):
+        if points[0] == max(points) and points[1] != points[0]:
             winner = 1
-        else:
+        elif points[1] != points[0]:
             winner = 2
-        player_turn_text = font1.render(
-            f"Game over,", True, [p1_color, p2_color][winner - 1]
-        )
+        else:
+            winner = "draw"
         player_turn_text2 = font2.render(f"Game over,", True, black)
-        turn_type_text = font1.render(
-            f"Player {winner} wins!", True, [p1_color, p2_color][winner - 1]
-        )
-        turn_type_text2 = font2.render(f"Player {winner} wins!", True, black)
+        if type(winner) == int:
+            player_turn_text = font1.render(
+                f"Game over,", True, [p1_color, p2_color][winner - 1]
+            )
+
+            turn_type_text = font1.render(
+                f"Player {winner} wins!", True, [p1_color, p2_color][winner - 1]
+            )
+            turn_type_text2 = font2.render(f"Player {winner} wins!", True, black)
+        else:
+            player_turn_text = font1.render(f"Game over,", True, white)
+            turn_type_text = font1.render(f"It's a draw!", True, white)
+            turn_type_text2 = font2.render(f"It's a draw!", True, black)
+
     p1_points_text = font1.render(f"p1 points: {points[0]}", True, p1_color)
     p1_points_text2 = font2.render(f"p1 points: {points[0]}", True, black)
     p2_points_text = font1.render(f"p2 points: {points[1]}", True, p2_color)
@@ -137,6 +146,16 @@ def play_game(player1, player2, delay: int = 1):
             terminal,
         ) = yinsh_game.get_game_state()
         player = players[active_player]
+        make_game_text(
+            screen,
+            turn_type,
+            active_player,
+            board,
+            points,
+            valid_moves,
+            prev_move,
+            terminal,
+        )
 
         if not terminal:
             # draw valid moves
