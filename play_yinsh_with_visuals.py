@@ -17,6 +17,77 @@ def pgvec(coord):
     return pygame.Vector2((screen_point(*coord)))
 
 
+VALID = 2
+HIGHLIGHT = 1
+ACTUAL = 0
+
+
+def draw_move(move, turn_type, active_player, color_index: int, screen):
+    if (
+        turn_type == "setup new rings"
+        or turn_type == "move ring"
+        or turn_type == "remove ring"
+    ):
+        highlight = Piece(move, active_player, "ring", color_index)
+        highlight.draw(screen)
+    elif turn_type == "add marker":
+        highlight = Piece(move, active_player, "marker", color_index)
+        highlight.draw(screen)
+    elif turn_type == "remove run":
+        for marker in move:
+            highlight = Piece(marker, active_player, "marker", color_index)
+            highlight.draw(screen)
+
+
+def get_remove_run_from_mouse(runs):
+    pos = pygame.mouse.get_pos()
+    # find any run(s) mouse is hovering over
+    cc = closest_coord(*pos)
+    cc_in_runs = []
+    for run in runs:
+        if cc in run:
+            cc_in_runs.append(run)
+    # only return a move if there is at least one run mouse is over
+    if len(cc_in_runs) > 0:
+        # return the single run
+        if len(cc_in_runs) == 1:
+            return cc_in_runs[0]
+        elif len(cc_in_runs) > 1:
+            # tie breaker for multiple runs with cumulative distance to markers
+            run_dists = []
+            for run in cc_in_runs:
+                curr_dists2 = 0
+                for marker in run:
+                    pt = screen_point(*marker)
+                    curr_dists2 += (pt[0] - pos[0]) ** 2 + (pt[1] - pos[1]) ** 2
+                run_dists.append(curr_dists2)
+            index_min = min(range(len(run_dists)), key=run_dists.__getitem__)
+            closest_run = cc_in_runs[index_min]
+            return closest_run
+    return []
+
+
+def highlight_human_move(valid_moves, screen, turn_type, active_player):
+    if turn_type != "remove run":
+        move = closest_coord(*pygame.mouse.get_pos())
+        if move in valid_moves:
+            draw_move(move, turn_type, active_player, HIGHLIGHT, screen)
+            return True
+    else:
+        # turn_type == "remove run", move is list of 5 markers instead of coord
+        move = get_remove_run_from_mouse(valid_moves)
+        if move:
+            draw_move(move, turn_type, active_player, HIGHLIGHT, screen)
+            return True
+    return False, move
+
+
+def make_valid_move(yinsh_game, valid_move):
+    # non valid moves are cheating and may break the game
+    yinsh_game.take_turn(valid_move)
+    yinsh_game.setup_next_turn_and_player()
+
+
 # -- | Get the exact board coordinate which is closest to the given screen coordinate.
 # closestCoord :: ScreenCoord -> YCoord
 def closest_coord(xi, yi):
@@ -121,6 +192,7 @@ def play_game(player1, player2, delay: int = 1):
     yinsh_game = YinshGame()
     players = [player1, player2]
 
+    already_highlighted = False
     # try:
     while running:
         # poll for events
@@ -158,32 +230,8 @@ def play_game(player1, player2, delay: int = 1):
         )
 
         if not terminal:
-            # draw valid moves
-            # depends on turn type
-            """
-            setup new rings,  # add a ring
-            add marker,  # add a marker in ring
-            move ring,  # move ring at given position
-            remove run # remove one of a platers run(s), param is last player that moved a ring
-            remove_ring(player),  # remove one ring
-            """
-            if (
-                turn_type == "setup new rings"
-                or turn_type == "move ring"
-                or turn_type == "remove ring"
-            ):
-                for move in valid_moves:
-                    valid = Piece(move, active_player, "ring", 2)
-                    valid.draw(screen)
-            elif turn_type == "add marker":
-                for move in valid_moves:
-                    valid = Piece(move, active_player, "marker", 2)
-                    valid.draw(screen)
-            elif turn_type == "remove run":
-                for run in valid_moves:
-                    for marker in run:
-                        valid = Piece(marker, active_player, "marker", 2)
-                        valid.draw(screen)
+            for move in valid_moves:
+                draw_move(move, turn_type, active_player, VALID, screen)
 
         # draw board lines
         draw_grid(screen)
@@ -197,60 +245,23 @@ def play_game(player1, player2, delay: int = 1):
             if players[active_player] is None:
                 # highlight the move that the mouse is hovering over if it's a valid
                 # make that move if it's also clicked
-                cc = closest_coord(*pygame.mouse.get_pos())
-                if (
-                    turn_type == "setup new rings"
-                    or turn_type == "move ring"
-                    or turn_type == "remove ring"
-                ):
-                    if cc in valid_moves:
-                        highlight = Piece(cc, active_player, "ring", 1)
-                        highlight.draw(screen)
-                        if clicked:
-                            yinsh_game.take_turn(cc)
-                            yinsh_game.setup_next_turn_and_player()
-                elif turn_type == "add marker":
-                    if cc in valid_moves:
-                        highlight = Piece(cc, active_player, "marker", 1)
-                        highlight.draw(screen)
-                        if clicked:
-                            yinsh_game.take_turn(cc)
-                            yinsh_game.setup_next_turn_and_player()
-                elif turn_type == "remove run":
-                    cc_in_runs = []
-                    for run in valid_moves:
-                        if cc in run:
-                            cc_in_runs.append(run)
-                    if len(cc_in_runs) > 0:
-                        if len(cc_in_runs) == 1:
-                            closest_run = cc_in_runs[0]
-                        elif len(cc_in_runs) > 1:
-                            # tie breaker
-                            pos = pygame.mouse.get_pos()
-                            run_dists = []
-                            for run in cc_in_runs:
-                                curr_dists2 = 0
-                                for marker in run:
-                                    pt = screen_point(*marker)
-                                    curr_dists2 += (pt[0] - pos[0]) ** 2 + (
-                                        pt[1] - pos[1]
-                                    ) ** 2
-                                run_dists.append(curr_dists2)
-                            index_min = min(
-                                range(len(run_dists)), key=run_dists.__getitem__
-                            )
-                            closest_run = cc_in_runs[index_min]
-                        for marker in closest_run:
-                            highlight = Piece(marker, active_player, "marker", 1)
-                            highlight.draw(screen)
-                        if clicked:
-                            yinsh_game.take_turn(closest_run)
-                            yinsh_game.setup_next_turn_and_player()
+                valid, move = highlight_human_move(
+                    valid_moves, screen, turn_type, active_player
+                )
+                if valid and clicked:
+                    make_valid_move(yinsh_game, move)
                 pygame.display.flip()
             else:
-                time.sleep(delay)
-                yinsh_game.take_turn(players[active_player].make_move(valid_moves))
-                yinsh_game.setup_next_turn_and_player()
+                if not already_highlighted:
+                    move = player.make_move(valid_moves)
+                    draw_move(move, turn_type, active_player, HIGHLIGHT, screen)
+                    already_highlighted = True
+                    pygame.display.flip()
+                else:
+                    time.sleep(delay)
+                    make_valid_move(yinsh_game, move)
+                    already_highlighted = False
+                    pygame.display.flip()
         # flip() the display to put your work on screen
         pygame.display.flip()
     # except OSError as e:
