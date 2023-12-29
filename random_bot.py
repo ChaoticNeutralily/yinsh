@@ -8,10 +8,10 @@ class UniformRandomPlayer:
         else:
             self.rng = rng
 
-    def make_move(self, valid_moves):
-        move = self.rng.choice(valid_moves)
+    def make_move(self, game_state):
+        move = self.rng.choice(game_state.valid_moves)
 
-        if type(valid_moves[0]) == tuple:
+        if type(game_state.valid_moves[0]) == tuple:
             return tuple(move)
         else:
             return [tuple(coord) for coord in move]

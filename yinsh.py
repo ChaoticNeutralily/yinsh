@@ -94,8 +94,8 @@ run_start_coords = [
 
 
 class GameBoard:
-    def __init__(self):
-        self.elements = {}  # coord: ("ring"/"marker", player)
+    def __init__(self, elements={}, rings=[[], []], markers=[[], []]):
+        self.elements = elements  # coord: ("ring"/"marker", player)
         self.rings = [[], []]
         self.markers = [[], []]
 
@@ -118,6 +118,9 @@ class GameBoard:
     def modify_element(self, coordinate, new_element):
         self.remove_element(coordinate)
         self.add_element(coordinate, new_element)
+
+    def __repr__(self):
+        return f"GameBoard(elements = {repr(self.elements)}, rings = {repr(self.rings)}, markers = {repr(self.markers)})"
 
 
 @dataclass

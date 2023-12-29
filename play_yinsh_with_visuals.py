@@ -1,6 +1,7 @@
 # Example file showing a circle moving on screen
 
 import argparse
+from dataclasses import fields
 from math import sqrt
 import time
 
@@ -186,6 +187,14 @@ def draw_game_text(
     screen.blit(p2_points_text, (int(600 * res * 4 / 5) - 40, 40))
 
 
+def print_game_state_initialization(game_state: GameState):
+    print("game_state = GameState(")
+    for field in fields(GameState):
+        value = getattr(game_state, field.name)
+        print(f"    {field.name} = {repr(value)}")
+    print(")")
+
+
 def play_game(player1, player2, delay: int = 1):
     # pygame setup
     pygame.init()
@@ -242,7 +251,7 @@ def play_game(player1, player2, delay: int = 1):
             else:
                 if not already_highlighted:
                     time.sleep(1 * delay / 3)
-                    move = player.make_move(gs.valid_moves)
+                    move = player.make_move(gs)
                     draw_move(move, gs.turn_type, gs.active_player, HIGHLIGHT, screen)
                     already_highlighted = True
                     pygame.display.flip()
@@ -251,14 +260,7 @@ def play_game(player1, player2, delay: int = 1):
                     draw_move(move, gs.turn_type, gs.active_player, HIGHLIGHT, screen)
                     make_valid_move(yinsh_game, move)
                     already_highlighted = False
-    print(f'turn_type = "{gs.turn_type}"')
-    print(f"active_player = {gs.active_player}")
-    print(f"board.elements = {gs.board.elements}")
-    print(f"board.markers = {gs.board.markers}")
-    print(f"board.rings = {gs.board.rings}")
-    print(f"points = {gs.points}")
-    print(f"valid_moves = {gs.valid_moves}")
-    print(f"prev_move = {gs.prev_move}")
+    print_game_state_initialization(gs)
     pygame.quit()
 
 
