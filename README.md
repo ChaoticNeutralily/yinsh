@@ -1,4 +1,5 @@
-TODO:
+# TODO
+
 - [ ] cythonize yinsh.py
 - [x] make `play_yinsh_with_visuals.py` more modular instead of one big function
 - [x] make random_bot take full gamestate so `play_yinsh_with_visuals.py` is bot-generic
