@@ -258,7 +258,7 @@ class YinshGame:
         for marker_coord in run:
             self.board.remove_element(marker_coord)
 
-    def terminal(self) -> bool:
+    def is_terminal(self) -> bool:
         """Check if game ends due to points or insufficienct markers to add"""
         return max(self.points) == self.points_to_win or (
             self.turn_type == "add marker"
@@ -312,7 +312,7 @@ class YinshGame:
         elif self.turn_type == "remove ring":
             has_a_run, runs = self.has_runs(self.active_player)
             if has_a_run:
-                self.run_clearing_setup(run)
+                self.run_clearing_setup(runs)
             else:
                 if self.last_moved == self.active_player:
                     self.active_player = 1 - self.active_player
@@ -325,6 +325,7 @@ class YinshGame:
                 else:
                     self.turn_type = "add marker"
                     self.set_valid_add_markers()
+        self.terminal = self.is_terminal()
         return
 
     def take_turn(self, move):
