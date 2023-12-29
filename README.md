@@ -5,7 +5,7 @@
 - [x] make random_bot take full gamestate so `play_yinsh_with_visuals.py` is bot-generic
 - [x] prints initialization for final game state when gui game is closed.
 - [ ] implement non-gui play that tabulates results
-- [ ] implement ELO
+- [ ] implement Elo
 - [ ] make manual features
 - [ ] make simple bots
 - [ ] copy floyd bot
