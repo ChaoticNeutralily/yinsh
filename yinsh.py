@@ -7,7 +7,7 @@ Rules of Yinsh at https://www.boardspace.net/yinsh/english/rules.htm
 from copy import deepcopy
 from dataclasses import dataclass, field
 from math import sqrt
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 
 def default_field(obj):
@@ -127,8 +127,10 @@ class GameBoard:
 class GameState:
     turn_type: str = "setup new rings"
     active_player: int = 0
-    board: GameBoard = GameBoard()
-    points: List[int] = default_field([0, 0])
+    board: GameBoard = field(
+        default_factory=lambda: GameBoard(elements={}, rings=[[], []], markers=[[], []])
+    )
+    points: List[int] = field(default_factory=lambda: [0, 0])
     points_to_win: int = 3
     valid_moves: Union[
         List[Tuple[int, int]], List[List[Tuple[int, int]]]
@@ -140,7 +142,9 @@ class GameState:
 
 
 class YinshGame:
-    def __init__(self, game_state=GameState()):
+    def __init__(self, game_state: Optional[GameState] = None):
+        if game_state is None:
+            game_state = GameState()
         self.turn_type: str = game_state.turn_type
         self.active_player: int = game_state.active_player
         self.board: GameBoard = game_state.board
@@ -163,7 +167,7 @@ class YinshGame:
             self.last_moved,
             self.prev_ring,
             self.max_markers_before_draw,
-            self.terminal,
+            self.is_terminal(),
         )
 
     def get_markers(self, player):
