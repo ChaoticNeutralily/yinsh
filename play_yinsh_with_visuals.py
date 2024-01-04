@@ -3,6 +3,7 @@
 import argparse
 from dataclasses import fields
 from math import sqrt
+import numpy as np
 import time
 
 import pygame
@@ -11,7 +12,6 @@ import pygame
 from pieces import Piece, screen_point
 from utils import *
 from yinsh import *
-from random_bot import UniformRandomPlayer
 
 
 def pgvec(coord):
@@ -83,12 +83,6 @@ def highlight_human_move(valid_moves, screen, turn_type, active_player):
     return False, move
 
 
-def make_valid_move(yinsh_game, valid_move):
-    # non valid moves are cheating and may break the game
-    yinsh_game.take_turn(valid_move)
-    yinsh_game.setup_next_turn_and_player()
-
-
 def draw_valid_moves(valid_moves, turn_type, active_player, screen):
     for move in valid_moves:
         draw_move(move, turn_type, active_player, VALID, screen)
@@ -124,6 +118,43 @@ def draw_grid(screen):
                 pygame.draw.aaline(screen, "black", pgvec(coord), pgvec(coord2))
 
 
+def get_shadow_text(text, color, font1, font2):
+    t = font1.render(text, True, color)
+    ts = font2.render(text, True, black)
+    return t, ts
+
+
+def display_shadowed_text(text, color, font1, font2, position, screen):
+    text_render, shadow_render = get_shadow_text(text, color, font1, font2)
+    for i in range(-1, 1):
+        screen.blit(shadow_render, (position[0] - i, position[1] - i))
+    screen.blit(text_render, position)
+
+
+def draw_end_game_text(points, display_text):
+    winner = get_winner(points)
+    win_color = [p1_color, p2_color, white][winner - 1]
+    display_text(f"Game over,", win_color, (5, 5))
+    if winner != 3:
+        display_text(f"Player {winner} wins!", win_color, (5, 40))
+    else:
+        display_text(f"It's a draw!", win_color, (5, 40))
+
+
+def draw_turn_text(active_player, turn_type, display_text):
+    display_text(
+        f"Player {active_player+1}'s turn",
+        [p1_color, p2_color][active_player],
+        (5, 5),
+    )
+
+    display_text(
+        f"{turn_type}",
+        [p1_color, p2_color][active_player],
+        (5, 40),
+    )
+
+
 def draw_game_text(
     screen,
     turn_type,
@@ -131,60 +162,21 @@ def draw_game_text(
     points,
     terminal,
 ):
-    # print text above game state
-    font1 = pygame.font.SysFont("chalkduster.ttf", 42)
-    font2 = pygame.font.SysFont("chalkduster.ttf", 42)
-    if not terminal:
-        player_turn_text = font1.render(
-            f"Player {active_player+1}'s turn",
-            True,
-            [p1_color, p2_color][active_player],
-        )
-        player_turn_text2 = font2.render(
-            f"Player {active_player+1}'s turn", True, black
-        )
-        turn_type_text = font1.render(
-            f"{turn_type}", True, [p1_color, p2_color][active_player]
-        )
-        turn_type_text2 = font2.render(f"{turn_type}", True, black)
+    # define how to display the text
+    font1 = pygame.font.SysFont("arial.ttf", 42)
+    font2 = pygame.font.SysFont("arial.ttf", 42)
+
+    def display_text(text, color, position):
+        display_shadowed_text(text, color, font1, font2, position, screen)
+
+    if terminal:
+        draw_end_game_text(points, display_text)
     else:
-        if points[0] == max(points) and points[1] != points[0]:
-            winner = 1
-        elif points[1] != points[0]:
-            winner = 2
-        else:
-            winner = "draw"
-        player_turn_text2 = font2.render(f"Game over,", True, black)
-        if type(winner) == int:
-            player_turn_text = font1.render(
-                f"Game over,", True, [p1_color, p2_color][winner - 1]
-            )
+        draw_turn_text(active_player, turn_type, display_text)
 
-            turn_type_text = font1.render(
-                f"Player {winner} wins!", True, [p1_color, p2_color][winner - 1]
-            )
-            turn_type_text2 = font2.render(f"Player {winner} wins!", True, black)
-        else:
-            player_turn_text = font1.render(f"Game over,", True, white)
-            turn_type_text = font1.render(f"It's a draw!", True, white)
-            turn_type_text2 = font2.render(f"It's a draw!", True, black)
-
-    p1_points_text = font1.render(f"p1 points: {points[0]}", True, p1_color)
-    p1_points_text2 = font2.render(f"p1 points: {points[0]}", True, black)
-    p2_points_text = font1.render(f"p2 points: {points[1]}", True, p2_color)
-    p2_points_text2 = font1.render(f"p2 points: {points[1]}", True, black)
-
-    # display text shadow
-    for i in range(-1, 1):
-        screen.blit(player_turn_text2, (5 - i, 5 - i))
-        screen.blit(turn_type_text2, (5 - i, 40 - i))
-        screen.blit(p1_points_text2, (int(600 * res * 4 / 5) - 40 - i, 5 - i))
-        screen.blit(p2_points_text2, (int(600 * res * 4 / 5) - 40 - i, 40 - i))
-    # display text
-    screen.blit(player_turn_text, (5, 5))
-    screen.blit(turn_type_text, (5, 40))
-    screen.blit(p1_points_text, (int(600 * res * 4 / 5) - 40, 5))
-    screen.blit(p2_points_text, (int(600 * res * 4 / 5) - 40, 40))
+    # draw points
+    display_text(f"p1 points: {points[0]}", p1_color, (int(600 * res * 4 / 5) - 40, 5))
+    display_text(f"p2 points: {points[1]}", p2_color, (int(600 * res * 4 / 5) - 40, 40))
 
 
 def print_game_state_initialization(game_state: GameState):
@@ -237,7 +229,6 @@ def play_game(player1, player2, delay: int = 1):
         draw_pieces_on_board(gs.board, screen)
 
         # highlight and make selected move if applicable
-        pygame.display.flip()
         if not gs.terminal:
             if players[gs.active_player] is None:
                 # highlight the move that the mouse is hovering over if it's a valid
@@ -246,9 +237,10 @@ def play_game(player1, player2, delay: int = 1):
                     gs.valid_moves, screen, gs.turn_type, gs.active_player
                 )
                 if valid and clicked:
-                    make_valid_move(yinsh_game, move)
+                    yinsh_game.take_turn(move)
                 pygame.display.flip()
             else:
+                pygame.display.flip()
                 if not already_highlighted:
                     time.sleep(1 * delay / 3)
                     move = player.make_move(gs)
@@ -258,16 +250,12 @@ def play_game(player1, player2, delay: int = 1):
                     time.sleep(2 * delay / 3)
                 else:
                     draw_move(move, gs.turn_type, gs.active_player, HIGHLIGHT, screen)
-                    make_valid_move(yinsh_game, move)
+                    yinsh_game.take_turn(move)
                     already_highlighted = False
+        pygame.display.flip()
     print_game_state_initialization(gs)
     pygame.quit()
-
-
-def get_bot(kind_of_player: str):
-    if kind_of_player == "random":
-        return UniformRandomPlayer()
-    return None  # "human", or any not implemented bot
+    return get_winner(gs.points)
 
 
 def main():
@@ -278,9 +266,31 @@ def main():
     parser.add_argument("delay", type=float, default=1)
     args = parser.parse_args()
 
-    bot1 = get_bot(args.player1)
-    bot2 = get_bot(args.player2)
-    play_game(bot1, bot2, args.delay)
+    p1 = args.player1
+    p2 = args.player2
+    try:
+        player_data = load_data()
+        print(player_data)
+    except:
+        player_data = {}
+    player_data = new_bot_data_entry(p1, player_data, overwrite=False)
+    player_data = new_bot_data_entry(p2, player_data, overwrite=False)
+
+    bot1 = get_bot(p1, 0)
+    bot2 = get_bot(p2, 1)
+
+    elo1 = player_data[p1]["full_elo"]
+    elo2 = player_data[p2]["full_elo"]
+    print(f"{p1}: elo = {elo1}")
+    print(f"{p2}: elo = {elo2}")
+    winner = play_game(
+        bot1,
+        bot2,
+        args.delay,
+        # elo1, # not implemented drawn elo yet.
+        # elo2,
+    )
+    update_score_information(p1, p2, winner, player_data)
 
 
 if __name__ == "__main__":

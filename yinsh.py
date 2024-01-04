@@ -157,17 +157,19 @@ class YinshGame:
         self.terminal: bool = game_state.terminal
 
     def get_game_state(self):
-        return GameState(
-            self.turn_type,
-            self.active_player,
-            self.board,
-            self.points,
-            self.points_to_win,
-            self.valid_moves,
-            self.last_moved,
-            self.prev_ring,
-            self.max_markers_before_draw,
-            self.is_terminal(),
+        return deepcopy(
+            GameState(
+                self.turn_type,
+                self.active_player,
+                self.board,
+                self.points,
+                self.points_to_win,
+                self.valid_moves,
+                self.last_moved,
+                self.prev_ring,
+                self.max_markers_before_draw,
+                self.is_terminal(),
+            )
         )
 
     def get_markers(self, player):
@@ -180,10 +182,12 @@ class YinshGame:
         return self.board.elements.get(coordinate)  # None if nothing there
 
     def is_marker(self, coordinate):
-        return self.get_element(coordinate)[0] == "marker"
+        e = self.get_element(coordinate)
+        return e is not None and e[0] == "marker"
 
     def is_ring(self, coordinate):
-        return self.get_element(coordinate)[0] == "ring"
+        e = self.get_element(coordinate)
+        return e is not None and e[0] == "ring"
 
     def is_free(self, coordinate):
         return self.get_element(coordinate) is None
@@ -359,4 +363,4 @@ class YinshGame:
             # move is a ring of the active player
             self.points[self.active_player] += 1
             self.board.remove_element(move)
-        return
+        self.setup_next_turn_and_player()

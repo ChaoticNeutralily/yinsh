@@ -9,7 +9,20 @@
   - due to yinsh game kept persisting
   - even reinitializing game didn't fix
   - it was default args bug but still happened with the default_factory lambda func which was tricky.
-- [ ] implement Elo
+- [ ] implement performance Elo
+- [x] implement glicko2
+- [ ] implement I/O for automatic ranking updates. (about half done)
+- [ ] implement time control
+  - [ ] could just use python time library and just count up time used.
+Or, more complicated use
+  - [ ] server
+  - [ ] client
+- [ ] make game menu to optionally use instead of just commandline args
+  - [ ] allow to pick which player is human/bot
+  - [ ] set delay for bot(s)
+  - [ ] set the time control
+  - [ ] track rankings
+  - [ ] leaderboard
 - [ ] make manual features
 - [ ] make simple bots
 - [ ] copy floyd bot
