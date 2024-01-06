@@ -4,6 +4,7 @@ import argparse
 from dataclasses import fields
 import numpy as np
 
+from glicko2 import update_all_glicko2s, reset_all_glicko2s
 from competition_utils import *
 from utils import *
 from yinsh import *
@@ -24,6 +25,7 @@ def print_game_state_initialization(game_state: GameState):
 
 def play_game(player1, player2, yinsh_game):
     players = [player1, player2]
+    # print(players)
     gs = yinsh_game.get_game_state()
     while not gs.terminal:
         player = players[gs.active_player]
@@ -103,7 +105,9 @@ def main(player1, player2, num):
     winner = get_winner(state.points)
 
     if winner < 3:
-        print(f"---The winner of game {num} is {[player1, player2][winner-1]}!---")
+        print(
+            f"---The winner of game {num[0]} / {num[1]} is {[player1, player2][winner-1]}!---"
+        )
     else:
         print("---Draw---")
 
@@ -122,9 +126,29 @@ if __name__ == "__main__":
     # parser.add_argument("player2", type=str, default="random")
     parser.add_argument("num_games", type=int, default=1)
     args = parser.parse_args()
-
+    g = 0
+    games = []
+    for b1 in bot_list:
+        for b2 in bot_list:
+            if b1 != b2:
+                games.append((b1, b2))
     for i in range(args.num_games):
-        main(rng.choice(bot_list), rng.choice(bot_list), i)
+        np.random.shuffle(games)
+        for game in games:
+            g += 1
+            main(
+                game[0],
+                game[1],
+                (g, len(bot_list) * (len(bot_list) - 1) * args.num_games),
+            )
+        data = load_data()
+        games_played = 0
+        num_bots = len(bot_list)
+        for b in bot_list:
+            games_played += data[b]["games_played"]
+        if games_played / num_bots >= 20:
+            reset_all_glicko2s()
+            update_all_glicko2s()
 
     # fw = f"bot_scores/{args.player1}_{args.player2}_wins.npy"
     # fl = f"bot_scores/{args.player1}_{args.player2}_losses.npy"

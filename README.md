@@ -9,8 +9,11 @@
   - due to yinsh game kept persisting
   - even reinitializing game didn't fix
   - it was default args bug but still happened with the default_factory lambda func which was tricky.
-- [ ] implement performance Elo
+- [x] implement performance Elo
 - [x] implement glicko2
+  - [ ] Write tests to check implementation
+  - glicko2 scores are enourmous for some bots. think I found the cause
+  - [ ] forgot to have separate win/loss/draw arrays for current scoring timeframe versus all time.
 - [ ] implement I/O for automatic ranking updates. (about half done)
 - [ ] implement time control
   - [ ] could just use python time library and just count up time used.
@@ -21,9 +24,30 @@ Or, more complicated use
   - [ ] allow to pick which player is human/bot
   - [ ] set delay for bot(s)
   - [ ] set the time control
+  - [ ] set colors
   - [ ] track rankings
   - [ ] leaderboard
-- [ ] make manual features
-- [ ] make simple bots
-- [ ] copy floyd bot
+- [x] alphabeta negamax implementation
+  - [x] make manual features/heuristics for non-terminal evaluation
+  - [x] make simple bots
+  - [x] copy floyd bot
+    - [x] find cause of difference in floyd behavior during openings move values forgot to make the move it was checing, so all moves valued the same board state. big oof
+  - [ ] transposition table
+    - [ ] rewrite the floyd heuristics to just take a board instance
+  - [ ] hp tuning / BO to find best weight of basic heuristics and apply the weighted sum as a bot
+    - [ ] Do gnns work better for these than flat arrays?
+  - [ ] more heuristics for alphabeta, like from the iit student's bots
+  - [ ] principal variation search / negascout
+  - [ ] smarter move ordering
+- [ ] mcts bots (trying something like alphazero for these)
+  - [x] game_state -> flat tensor
+  - [x] flat tensor -> value and move probability
+  - [ ] decode prob over board into actual move probabilities for valid moves
+  - [ ] gamestate -> 2d tensor stack
+  - [ ] conv/resnet: 2d tensor stack -> value and move probability
+  - [ ] mcts code
+  - [ ] training code for policy improvement using mcts
+  - [ ] use nn value functions for alphabeta
+  - [ ] use nn policy directly for actual playing
+  - [ ] mcts using value for actual playing.
 - [ ] copy other python bots if they're simple enough to directly copy

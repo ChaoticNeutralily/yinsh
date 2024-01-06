@@ -5,6 +5,7 @@ from typing import Callable
 from yinsh import GameState, YinshGame, connected, get_points_between, coords
 
 BIG_NUMBER = (2**31) - 1
+EPS = 1e-5
 
 
 def norm2(coord):
@@ -29,15 +30,14 @@ class FixedDepthMiniMaxTreePlayer:
         depth,
         estimate_value: Callable[[GameState], float],
         opening_depth=1,
+        ab=True,
     ):
-        # if rng is None:
-        #     self.rng = np.random.default_rng()
-        # else:
-        #     self.rng = rng
+        self.rng = np.random.default_rng()
         self.player = player_number
         self.estimate_value = estimate_value
         self.max_depth = depth
         self.opening_depth = opening_depth
+        self.ab = ab
 
     def sort_moves(self, game_state):
         if game_state.turn_type != "remove run":
@@ -57,41 +57,84 @@ class FixedDepthMiniMaxTreePlayer:
             )
         return value
 
+    def negamax_ab_prune(self, game_state, depth, a, b, player_sign):
+        if game_state.terminal or depth == 0:
+            return player_sign * self.estimate_value(game_state)
+        value = -float("inf")
+        moves = self.sort_moves(game_state)
+        for move in moves:
+            g = YinshGame(deepcopy(game_state))
+            g.take_turn(move)
+            value = max(
+                [
+                    value,
+                    -self.negamax_ab_prune(
+                        g.get_game_state(), depth - 1, -b, -a, -player_sign
+                    ),
+                ]
+            )
+            a = max([a, value])
+            if a >= b:
+                break
+        return value
+
     def get_move_values(self, moves, game_state):
-        if game_state.turn_type == "setup new rings":
+        if (
+            game_state.turn_type == "setup new rings"
+            and len(game_state.board.rings[game_state.active_player]) <= 3
+        ):
             depth = self.opening_depth
+        elif (
+            game_state.turn_type == "setup new rings"
+            and len(game_state.board.rings[game_state.active_player]) == 4
+        ):
+            depth = self.opening_depth + 1
         else:
             depth = self.max_depth
-        values = np.zeros(
-            (
-                len(
-                    game_state.valid_moves,
-                )
-            )
-        )
+        values = np.zeros((len(moves),))
         for i, move in enumerate(moves):
+            g = YinshGame(deepcopy(game_state))
+            g.take_turn(move)
             player_sign = [1, -1][self.player]
-            values[i] = player_sign * self.negamax(game_state, depth, player_sign)
+            if self.ab:
+                values[i] = self.negamax_ab_prune(
+                    g.get_game_state(), depth, -float("inf"), float("inf"), player_sign
+                )
+            else:
+                values[i] = self.negamax(g.get_game_state(), depth, player_sign)
         return values
 
     def make_move(self, game_state):
         moves = self.sort_moves(game_state)
         values = self.get_move_values(moves, game_state)
-        if len(values) != len(moves):
-            print("debug size mismatch")
-            print(f"debug values {values}")
-            print(f"debug moves {moves}")
-        if values.size > 0:
-            move = moves[np.argmax(values)]
-            # print(sorted(values))
-            if type(game_state.valid_moves[0]) == tuple:
-                return tuple(move)
-            else:
-                return [tuple(coord) for coord in move]
+        # if len(values) != len(moves):
+        #     print("debug size mismatch")
+        #     print(f"debug values {values}")
+        #     print(f"debug moves {moves}")
+        # if values.size > 0:
+        max_inds = []
+        max_val = -float("inf")
+        for i, value in enumerate(values):
+            if value > max_val:
+                max_inds = [i]
+                max_val = value
+            elif value == max_val:
+                max_inds.append(i)
+        # if len(max_inds) > 0:
+        # print(f"DEBUG options: {[(values[i], moves[i]) for i in max_inds]}")
+        # print(len(max_inds))
+        # print(len(values))
+        move = moves[self.rng.choice(max_inds)]
+
+        # print(sorted(values))
+        if type(game_state.valid_moves[0]) == tuple:
+            return tuple(move)
         else:
-            print("empty values")
-            print(game_state)
-            return
+            return [tuple(coord) for coord in move]
+        # else:
+        #     print("empty values")
+        #     print(game_state)
+        #     return
 
 
 def num_ring_connections(game, rings) -> int:

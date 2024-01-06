@@ -8,7 +8,7 @@ import time
 
 import pygame
 
-# from utils import *
+from competition_utils import *
 from pieces import Piece, screen_point
 from utils import *
 from yinsh import *
@@ -250,6 +250,7 @@ def play_game(player1, player2, delay: int = 1):
                     time.sleep(2 * delay / 3)
                 else:
                     draw_move(move, gs.turn_type, gs.active_player, HIGHLIGHT, screen)
+                    print(f"DEBUG {move}")
                     yinsh_game.take_turn(move)
                     already_highlighted = False
         pygame.display.flip()

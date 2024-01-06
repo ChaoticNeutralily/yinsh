@@ -19,7 +19,17 @@ from glicko2 import (
 import numpy as np
 
 
-bot_list = ["random", "floyd", "floyd_combined", "floyd_u", "connections", "moves"]
+bot_list = [
+    "random",
+    "floyd",
+    "floyd_combined",
+    "floyd_u",
+    "connections",
+    "moves",
+    "markers",
+    "floyd_d=2",
+    "negative_floyd",
+]
 
 
 # num_controlled_markers, num_unique_controlled_markers, markers_x10, total_ring_moves, combined_heuristic
@@ -65,6 +75,25 @@ def get_bot(kind_of_player: str, player):
 
         def estimate(game_state):
             return floyd_estimate(game_state, ring_heuristic=total_ring_moves)
+
+        return FixedDepthMiniMaxTreePlayer(player, depth, estimate, start_depth)
+
+    elif kind_of_player == "markers":
+
+        def estimate(game_state):
+            return floyd_estimate(game_state, ring_heuristic=lambda x, y: 0)
+
+        return FixedDepthMiniMaxTreePlayer(player, depth, estimate, start_depth)
+
+    elif kind_of_player == "floyd_d=2":
+        return FixedDepthMiniMaxTreePlayer(player, 2, floyd_estimate, start_depth)
+
+    elif kind_of_player == "negative_floyd":
+
+        def estimate(game_state):
+            return -floyd_estimate(
+                game_state
+            )  # should play whatever floyd thinks is the worst value
 
         return FixedDepthMiniMaxTreePlayer(player, depth, estimate, start_depth)
     return None  # "human", or any not implemented bot

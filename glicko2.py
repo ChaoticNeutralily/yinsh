@@ -1,6 +1,7 @@
 """Implements http://www.glicko.net/glicko/glicko2.pdf"""
 import numpy as np
 import pickle
+import pprint
 
 TAU = 0.5
 INITIAL_RATING = 1500
@@ -50,10 +51,12 @@ def estimate_rating_improvement(
 
     estimated improvement in rating by comparing pre-period rating to the performance rating based only on game outcomes.
     """
-    variance = game_outcome_variance(rating, ratings, deviations)
-    e = expected_scores(rating, ratings, deviations)
-    gs = g(deviations)
-    return variance * sum(gs * (scores - e))
+    e = expected_scores(player_rating, opponent_ratings, opponent_deviations)
+    gs = g(opponent_deviations)
+    variance = game_outcome_variance(
+        player_rating, opponent_ratings, opponent_deviations, gs, e
+    )
+    return variance * sum(gs * (player_scores_vs_opponents - e))
 
 
 def ff(x, D2, p2, v, a):
@@ -65,11 +68,11 @@ def ff(x, D2, p2, v, a):
 
 def initial_log_volativity_bounds(volatility, D2, p2, v, f):
     upper = 2 * np.log(volatility)
-    if D2 > p2 + variance:
+    if D2 > p2 + v:
         lower = np.log(D2 - p2 - v)
     else:
         k = 1
-        while f(A - k * TAU) < 0:
+        while f(upper - k * TAU) < 0:
             k += 1
         lower = upper - k * TAU
     return upper, lower
@@ -90,7 +93,7 @@ def compute_volatility(
     a = 2 * np.log(old_volatility)
     D2 = estimated_rating_improvement**2
     p2 = deviation**2
-    f = lambda x: ff(x, D2, p2, volatility, a)
+    f = lambda x: ff(x, D2, p2, old_volatility, a)
     upper, lower = initial_log_volativity_bounds(old_volatility, D2, p2, variance, f)
     f_upper = f(upper)
     f_lower = f(lower)
@@ -109,7 +112,8 @@ def compute_volatility(
         iters += 1
 
     print(f"iterations to compute volatility: {iters}")
-    volatility = np.exp(upper / 2)
+    new_volatility = np.exp(upper / 2)
+    return new_volatility
 
 
 def new_pre_period_dev(deviation, volatility):
@@ -117,7 +121,7 @@ def new_pre_period_dev(deviation, volatility):
 
     Rating and volatility remain the same.
     """
-    return np.sqrt(old_deviation**2 + new_volatility**2)
+    return np.sqrt(deviation**2 + volatility**2)
 
 
 def new_glicko2_dev(new_pre_period_dev, outcome_variance):
@@ -125,7 +129,7 @@ def new_glicko2_dev(new_pre_period_dev, outcome_variance):
 
 
 def new_glicko2_rating(glicko2_rating, new_glicko2_dev, gs, scores, e_scores):
-    glicko2_rating + (new_glicko2_dev**2) * sum(gs * (scores - e_scores))
+    return glicko2_rating + (new_glicko2_dev**2) * sum(gs * (scores - e_scores))
 
 
 def unglicko2_rating(glicko2_rating):
@@ -176,9 +180,9 @@ def get_rdv(data, num_players, prefix):
     for opponent in data.keys():
         tmp = data[opponent]
         for arr, info in zip(
-            [ratings, deviation, volatility], ["rating", "deviation", "volatility"]
+            [ratings, deviations, volatilities], ["rating", "deviation", "volatility"]
         ):
-            arr[tmp[index]] = tmp[f"{prefix}_{info}"]
+            arr[tmp["index"]] = tmp[f"{prefix}_{info}"]
     return glicko2_rating(ratings), glicko2_dev(deviations), volatilities
 
 
@@ -189,37 +193,46 @@ def update_ranks_of_existing_player(player):
     index = data[player]["index"]
     p1_scores, p2_scores, full_scores = get_player_scores_vs_opponents(index)
     new_player_data = {}
-    for prefix, score, scores in zip(
-        ["p1", "p2", "full"], [p1_scores, p2_scores, full_scores]
+    for player_prefix, opponent_prefix, scores in zip(
+        ["p1", "p2", "full"],
+        ["p2", "p1", "full"],
+        [p1_scores, p2_scores, full_scores],
     ):
+        # for p1,p2, use opposite player
         # step 2
-        ratings, deviations, volatilities = get_rdv(data, num_players, prefix)
-        rating = ratings[index]
-        ratings = np.concatenate(
-            (ratings[:index], ratings[index + 1 :]), axis=None
-        )  # debug check this, no internet rn
-        deviation = deviations[index]
-        deviations = np.concatenate(
-            (deviations[:index], deviations[index + 1 :]), axis=None
+        p_ratings, p_deviations, volatilities = get_rdv(
+            data, num_players, player_prefix
         )
-        scores = np.concatenate((scores[:index], scores[index + 1 :]), axis=None)
+        rating = p_ratings[index]
+        deviation = p_deviations[index]
+        volatility = volatilities[index]
+
+        ratings, deviations, _ = get_rdv(data, num_players, opponent_prefix)
+        if player_prefix == "full":
+            # don't include self play in full ratings, but do include in one-sided ratings
+            ratings = np.concatenate((ratings[:index], ratings[index + 1 :]), axis=None)
+            deviations = np.concatenate(
+                (deviations[:index], deviations[index + 1 :]), axis=None
+            )
+
+            scores = np.concatenate((scores[:index], scores[index + 1 :]), axis=None)
         # step 3
         e_scores = expected_scores(rating, ratings, deviations)
         gs = g(deviations)
-        var = game_outcome_variance(rating, ratings, deviations, gs, e_scores)
+        variance = game_outcome_variance(rating, ratings, deviations, gs, e_scores)
         # step 4
         est_improvement = estimate_rating_improvement(
             rating, ratings, deviations, scores
         )
         # step 5
         new_volatility = compute_volatility(
-            data[player]["volatility"],
-            estimated_rating_improvement,
+            volatility,
+            est_improvement,
             deviation,
             variance,
         )
         # step 6
-        if data["player"]["games_played"] == 0:
+        if data[player]["games_played"] == 0:
             pre_period_dev = new_pre_period_dev(deviation, volatility)
             new_gdeviation = pre_period_dev
             new_grating = rating
@@ -233,22 +246,68 @@ def update_ranks_of_existing_player(player):
         # step 8
         nr = unglicko2_rating(new_grating)
         nd = unglicko2_dev(new_gdeviation)
-        new_player_data[f"{prefix}_rating"] = nr
-        new_player_data[f"{prefix}_deviation"] = nd
-        new_player_data[f"{prefix}_volatility"] = new_volatility
+        new_player_data[f"{player_prefix}_rating"] = nr
+        new_player_data[f"{player_prefix}_deviation"] = nd
+        new_player_data[f"{player_prefix}_volatility"] = new_volatility
     return new_player_data
-    # load in {player1}_{*}_wins
+
+
+def update_all_glicko2s():
+    data = load_data()
+    new_data = {}
+    pprint.pprint(data)
+    print("-----Updating data-----")
+    for player in data.keys():
+        new_data[player] = update_ranks_of_existing_player(player)
+        new_data[player]["games_played"] = 0
+        new_data[player]["index"] = data[player]["index"]
+        if new_data[player].get("total_games_played") is None:
+            new_data[player]["total_games_played"] = data[player]["games_played"]
+        else:
+            new_data[player]["total_games_played"] = (
+                data[player]["games_played"] + data[player]["total_games_played"]
+            )
+        new_data[player]["p1_elo"] = data[player]["p1_elo"]
+        new_data[player]["p2_elo"] = data[player]["p2_elo"]
+        new_data[player]["full_elo"] = data[player]["full_elo"]
+    pprint.pprint(new_data)
+    save_player_data(new_data)
+
+
+def reset_all_glicko2s():
+    data = load_data()
+    new_data = {}
+    pprint.pprint(data)
+    print("-----Updating data-----")
+    for player in data.keys():
+        new_data[player] = {
+            "p1_rating": INITIAL_RATING,
+            "p1_deviation": INITIAL_DEV,
+            "p1_volatility": INITIAL_VOLATILITY,
+            "p2_rating": INITIAL_RATING,
+            "p2_deviation": INITIAL_DEV,
+            "p2_volatility": INITIAL_VOLATILITY,
+            "full_rating": INITIAL_RATING,
+            "full_deviation": INITIAL_DEV,
+            "full_volatility": INITIAL_VOLATILITY,
+            "index": data[player]["index"],
+            "total_games_played": (
+                data[player].get("total_games_played", 0)
+                + data[player].get("games_played", 0)
+            ),
+            "games_played": data[player].get("total_games_played", 0)
+            + data[player].get("games_played", 0),
+            "p1_elo": data[player]["p1_elo"],
+            "p2_elo": data[player]["p2_elo"],
+            "full_elo": data[player]["full_elo"],
+        }
+    pprint.pprint(new_data)
+    save_player_data(new_data)
 
 
 # scores = scores against each oponent (+1 for each win, +0.5 for each draw, 0 for each loss)
 
 
-# bot_data = {
-#     bot_name: {
-#         rating:
-#
-#     }
-# }
 def load_data():
     with open("scores/rating_data.pickle", "rb") as file:
         data = pickle.load(file)
