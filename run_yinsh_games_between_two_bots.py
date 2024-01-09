@@ -122,14 +122,25 @@ def main(player1, player2, num):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     rng = np.random.default_rng()
-    # parser.add_argument("player1", type=str, default="random")
-    # parser.add_argument("player2", type=str, default="random")
     parser.add_argument("num_games", type=int, default=1)
+    parser.add_argument("-b1", "--bot1", type=str, default="--")
+    parser.add_argument("-b2", "--bot2", type=str, default="--")
     args = parser.parse_args()
+    print(args)
     g = 0
     games = []
-    for b1 in bot_list:
-        for b2 in bot_list:
+    if args.bot1 == "--":
+        bot_list1 = bot_list
+    else:
+        bot_list1 = [args.bot1]
+
+    if args.bot2 == "--":
+        bot_list2 = bot_list
+    else:
+        bot_list2 = [args.bot2]
+
+    for b1 in bot_list1:
+        for b2 in bot_list2:
             if b1 != b2:
                 games.append((b1, b2))
     for i in range(args.num_games):
@@ -139,16 +150,16 @@ if __name__ == "__main__":
             main(
                 game[0],
                 game[1],
-                (g, len(bot_list) * (len(bot_list) - 1) * args.num_games),
+                (g, len(games) * args.num_games),
             )
         data = load_data()
         games_played = 0
         num_bots = len(bot_list)
         for b in bot_list:
             games_played += data[b]["games_played"]
-        if games_played / num_bots >= 20:
-            reset_all_glicko2s()
-            update_all_glicko2s()
+        # if games_played / num_bots >= 20:
+        #     reset_all_glicko2s()
+        #     update_all_glicko2s()
 
     # fw = f"bot_scores/{args.player1}_{args.player2}_wins.npy"
     # fl = f"bot_scores/{args.player1}_{args.player2}_losses.npy"

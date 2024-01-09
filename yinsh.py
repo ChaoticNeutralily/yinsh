@@ -140,6 +140,35 @@ class GameState:
     max_markers_before_draw: int = MAX_MARKERS
     terminal: bool = False
 
+    def __repr__(self):
+        """String of a canonical rep of the game."""
+        return (
+            str(int(self.active_player == self.last_moved))
+            + str(int(self.terminal))
+            + self.turn_type
+            + str(
+                [
+                    self.board.markers[self.active_player],
+                    self.board.markers[1 - self.active_player],
+                    self.max_markers_before_draw,
+                ]
+            )
+            + str(
+                [
+                    self.board.rings[self.active_player],
+                    self.board.rings[1 - self.active_player],
+                    self.prev_ring,
+                ]
+            )
+            + str(
+                [
+                    self.points[self.active_player],
+                    self.points[1 - self.active_player],
+                    self.points_to_win,
+                ]
+            )
+        )
+
 
 class YinshGame:
     def __init__(self, game_state: Optional[GameState] = None):
@@ -164,7 +193,7 @@ class YinshGame:
                 self.board,
                 self.points,
                 self.points_to_win,
-                self.valid_moves,
+                sorted(self.valid_moves),
                 self.last_moved,
                 self.prev_ring,
                 self.max_markers_before_draw,
@@ -337,6 +366,7 @@ class YinshGame:
                     self.turn_type = "add marker"
                     self.set_valid_add_markers()
         self.terminal = self.is_terminal()
+        self.valid_moves.sort()
         return
 
     def take_turn(self, move):
@@ -364,3 +394,9 @@ class YinshGame:
             self.points[self.active_player] += 1
             self.board.remove_element(move)
         self.setup_next_turn_and_player()
+
+    @staticmethod
+    def get_next_game_state(game_state, move):
+        y = YinshGame(game_state)
+        y.take_turn(move)
+        return y.get_game_state()

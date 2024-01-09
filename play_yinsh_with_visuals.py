@@ -264,7 +264,7 @@ def main():
 
     parser.add_argument("player1", type=str, default="human")
     parser.add_argument("player2", type=str, default="human")
-    parser.add_argument("delay", type=float, default=1)
+    parser.add_argument("-d", "--delay", type=float, default=0)
     args = parser.parse_args()
 
     p1 = args.player1

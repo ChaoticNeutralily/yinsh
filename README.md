@@ -14,7 +14,8 @@
   - [ ] Write tests to check implementation
   - glicko2 scores are enourmous for some bots. think I found the cause
   - [ ] forgot to have separate win/loss/draw arrays for current scoring timeframe versus all time.
-- [ ] implement I/O for automatic ranking updates. (about half done)
+- [x] implement I/O for automatic ranking updates. (about half done)
+- [ ] have visual version keep track of gamestates to allow undos for casual play
 - [ ] implement time control
   - [ ] could just use python time library and just count up time used.
 Or, more complicated use
