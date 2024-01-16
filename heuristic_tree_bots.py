@@ -65,11 +65,17 @@ class FixedDepthMiniMaxTreePlayer:
         for move in moves:
             g = YinshGame(deepcopy(game_state))
             g.take_turn(move)
+            sign_mult = [1, -1][g.active_player != game_state.active_player]
             value = max(
                 [
                     value,
-                    -self.negamax_ab_prune(
-                        g.get_game_state(), depth - 1, -b, -a, -player_sign
+                    sign_mult
+                    * self.negamax_ab_prune(
+                        g.get_game_state(),
+                        depth - 1,
+                        sign_mult * b,
+                        sign_mult * a,
+                        sign_mult * player_sign,
                     ),
                 ]
             )
@@ -193,9 +199,21 @@ def total_ring_moves(game, rings):
     return num_ring_moves
 
 
-def combined_heuristic(heuristic_iterable):
-    def new_heuristic(game, pieces):
-        return sum([heuristic(game, pieces) for heuristic in heuristic_iterable])
+def combined_heuristic(heuristic_iterable, wts=None):
+    if wts is None:
+
+        def new_heuristic(game, pieces):
+            return sum([heuristic(game, pieces) for heuristic in heuristic_iterable])
+
+    else:
+
+        def new_heuristic(game, pieces):
+            return sum(
+                [
+                    wt * heuristic(game, pieces)
+                    for wt, heuristic in zip(wts, heuristic_iterable)
+                ]
+            )
 
     return new_heuristic
 

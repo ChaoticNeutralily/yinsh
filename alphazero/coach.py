@@ -10,6 +10,10 @@ import numpy as np
 from tqdm import tqdm
 
 from yinsh import GameState, GameBoard
+from heuristic_tree_bots import (
+    FixedDepthMiniMaxTreePlayer,
+    floyd_estimate,
+)
 from alphazero.nn_utils import get_symmetries
 from alphazero.mcts import MCTS
 
@@ -153,7 +157,9 @@ class Coach:
             # bookkeeping
             log.info(f"Starting Iter #{i} ...")
             # examples of the iteration
-            if not self.skip_first_self_play or i > 1:
+            new_examples = False
+            if not self.skip_first_self_play or i > self.args.first_iter:
+                new_examples = True
                 iteration_train_examples = deque([], maxlen=self.args.maxlen_of_queue)
 
                 for _ in tqdm(range(self.args.num_episodes), desc="Self Play"):
@@ -173,10 +179,11 @@ class Coach:
                     f"Removing the oldest entry in train_examples. len(train_examples_history) = {len(self.train_examples_history)}"
                 )
                 self.train_examples_history.pop(0)
-            # backup history to a file
-            # NB! the examples were collected using the model from the previous iteration, so (i-1)
-            log.info(f"Saving training examples to checkpoint {i-1}.")
-            self.save_train_examples(i - 1)
+            if new_examples:
+                # backup history to a file
+                # NB! the examples were collected using the model from the previous iteration, so (i-1)
+                log.info(f"Saving training examples to checkpoint {i-1}.")
+                self.save_train_examples(i - 1)
 
             # shuffle examples before training
             train_examples = []
@@ -198,25 +205,39 @@ class Coach:
 
             log.info("PITTING AGAINST PREVIOUS VERSION")
             results = np.zeros((3,))
-            for _ in tqdm(range(self.args.num_arena_games), desc=f"Playing yinsh game"):
+            score = 0
+            threshold = self.args.num_arena_games * self.args.update_threshold
+            g = 0
+            game_prog_bar = tqdm(
+                range(self.args.num_arena_games), desc=f"Playing yinsh games"
+            )
+            for _ in game_prog_bar:
                 results += play_game(
                     pmcts.highest_prob_move,
                     nmcts.highest_prob_move,
                     self.game(GameState()),
                     self.nnet.history_length,
                 )
+                g += 1
+                score = results[1] + 0.5 * results[2]
+                game_prog_bar.set_postfix(
+                    res=f"wins={results[1]}, draws={results[2]}, losses={results[0]}, score={score}/{threshold}"
+                )
+                if (
+                    score >= threshold
+                    or score + (self.args.num_arena_games - g) < threshold
+                ):
+                    # if we've already surpassed theshold or if we'd be under despite winning all remaining games, stop early
+                    break
             pwins, nwins, draws = results.astype(int)
 
             log.info(
                 "NEW MODEL WINS / DRAWS / LOSSES : %d / %d / %d" % (nwins, draws, pwins)
             )
-            if (
-                (float(nwins) + 0.5 * float(draws))
-                / self.args.num_arena_games  # average score
-            ) < self.args.update_threshold:
+            if score < threshold:
                 log.info("REJECTING NEW MODEL")
                 self.nnet.load_checkpoint(
-                    folder=self.args.checkpoint, filename="best.pth.tar"
+                    folder=self.args.checkpoint, filename="temp.pth.tar"
                 )
             else:
                 log.info("ACCEPTING NEW MODEL")
@@ -226,6 +247,30 @@ class Coach:
                 self.nnet.save_checkpoint(
                     folder=self.args.checkpoint, filename="best.pth.tar"
                 )
+                # self.compare_to_floyd(self.nnet)
+
+    def compare_to_floyd(self, nnet):
+        floyd = FixedDepthMiniMaxTreePlayer(
+            player_number=0,
+            depth=3,
+            estimate_value=floyd_estimate,
+            opening_depth=1,
+            ab=True,
+        )
+        nmcts = MCTS(self.game, nnet, self.args)
+        game_prog_bar = tqdm(range(10), desc=f"Playing versus floyd")
+        results = np.zeros((3,))
+        for _ in game_prog_bar:
+            results += play_game(
+                lambda gs, h: floyd.make_move(gs),
+                nmcts.highest_prob_move,
+                self.game(GameState()),
+                self.nnet.history_length,
+            )
+            score = results[1] + 0.5 * results[2]
+            game_prog_bar.set_postfix(
+                r=f"wins={results[1]}, draws={results[2]}, losses={results[0]}, score={score}"
+            )
 
     def get_checkpoint_file(self, iteration):
         return "checkpoint_" + str(iteration) + ".pth.tar"
@@ -243,7 +288,8 @@ class Coach:
 
     def load_train_examples(self):
         model_file = os.path.join(
-            self.args.load_folder_file[0], self.args.load_folder_file[1]
+            self.args.load_folder_file[2],
+            self.args.load_folder_file[3],
         )
         examples_file = model_file + ".examples"
         if not os.path.isfile(examples_file):

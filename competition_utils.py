@@ -9,6 +9,9 @@ from heuristic_tree_bots import (
     total_ring_moves,
     combined_heuristic,
 )
+from alphazero.nn_utils import YinshNetFlat as flat_nn
+from alphazero.yinsh_nnet import YinshNetWrapper as nn
+from alphazero.mcts import MCTSbot
 from glicko2 import (
     load_data,
     save_player_data,
@@ -16,8 +19,30 @@ from glicko2 import (
     elo_expected_player_score,
     elo_update,
 )
+from yinsh import YinshGame
 import numpy as np
 
+
+class dotdict(dict):
+    def __getattr__(self, name):
+        return self[name]
+
+
+model_v1_args = dotdict(
+    {
+        "lr": 0.001,
+        "dropout": 0.3,
+        "epochs": 100,
+        "batch_size": 1024,  # 512,
+        "weight_decay": 0.01,
+        "gpu": "mps",  # [False, "mps", "cuda"]
+        "internal_width": 256,
+        "internal_layers": 2,
+        "external_width": 128,
+        "history_length": 1,
+        "show_dummy_loss": True,
+    }
+)
 
 bot_list = [
     "random",
@@ -29,6 +54,7 @@ bot_list = [
     "markers",
     "floyd_d=2",
     "negative_floyd",
+    "alphazero_checkpoint",
 ]
 
 
@@ -96,6 +122,13 @@ def get_bot(kind_of_player: str, player):
             )  # should play whatever floyd thinks is the worst value
 
         return FixedDepthMiniMaxTreePlayer(player, depth, estimate, start_depth)
+    elif kind_of_player == "alphazero_checkpoint":
+        nnet = nn(flat_nn, model_v1_args)
+        nnet.load_checkpoint(
+            f"checkpoint/",
+            "checkpoint.pth.tar",
+        )
+        return MCTSbot(YinshGame, nnet, num_sims=800)
     return None  # "human", or any not implemented bot
 
 

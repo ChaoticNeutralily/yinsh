@@ -50,7 +50,7 @@ class MCTS:
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         for i in range(self.args.num_MCTS_sims):
-            self.search(game_state, history)
+            self.search(game_state, history, sign=[1, -1][game_state.active_player])
 
         s = str(game_state)
         counts = [self.Nsa.get((s, a), 0) for a in range(len(game_state.valid_moves))]
@@ -75,7 +75,7 @@ class MCTS:
             np.argmax(self.get_action_probability(game_state, history, temp=0))
         ]
 
-    def search(self, game_state, history, n=0):
+    def search(self, game_state, history, sign, n=0):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
@@ -87,14 +87,15 @@ class MCTS:
         outcome is propagated up the search path. The values of Ns, Nsa, Qsa are
         updated.
 
-        NOTE: the return values are the negative of the value of the current
+        NOTE: the return values are the sign * the value of the current
         state. This is done since v is in [-1,1] and if v is the value of a
-        state for the current player, then its value is -v for the other player.
+        state for the current player, then its value is -v for the other signed player.
+        sign argument is relative sign of this state's value to the sign of the root for the searches
 
         Returns:
-            v: the negative of the value of the current canonicalBoard
+            v: the value of the current canonicalBoard for the player
         """
-
+        # sign = [1, -1][start_sign == game_state.active_player]
         s = str(game_state)
         # print(f"DEBUG search {n} {s} \n{[h.rings for h in history]}")
         if self.Es.get(s, None) is None:
@@ -102,18 +103,22 @@ class MCTS:
             self.Es[s] = Es_value(game_state.terminal, game_state.points)
         if self.Es[s] != 10:
             # terminal node
-            return -self.Es[s]
+            return sign * self.Es[s]  # DEBUG THIS (player doesn't always switch)
 
         if self.Ps.get(s, None) is None:
             # leaf node
             policy, value = self.nnet.predict(game_state, history)
             self.Ps[s] = self.nnet.nnet.postprocess(policy, game_state.valid_moves)
+            n_moves = len(game_state.valid_moves)
+            self.Ps[s] = self.Ps[s] * 0.75 + 0.25 * self.rng.dirichlet(
+                np.full((self.Ps[s].size,), 10 / n_moves)
+            )
 
             self.Vs[s] = game_state.valid_moves
             self.Ns[s] = 0
             # print(f"DEBUG value {value[0]}")
             # print(f"DEBUG value {type(value)}")
-            return -value[0]
+            return sign * value[0]  # DEBUG THIS
 
         valids = self.Vs[s]
         cur_best = -float("inf")
@@ -128,7 +133,7 @@ class MCTS:
                 upper_conf = (
                     self.args.cpuct * self.Ps[s][move_ind] * np.sqrt(self.Ns[s] + EPS)
                 )  # Q = 0 ?
-
+            # print(f"DEBUG: {self.Ps[s].shape}")
             if upper_conf > cur_best:
                 cur_best = upper_conf
                 best_move = move_ind
@@ -144,7 +149,10 @@ class MCTS:
             history.append(deepcopy(next_s.board))
 
         # print(f"DEBUG next {(n+1)} search{str(next_s)}")
-        value = 0.999 * self.search(next_s, deepcopy(history), n + 1)
+        if game_state.active_player != next_s.active_player:
+            value = self.search(next_s, deepcopy(history), -sign, n + 1)
+        else:
+            value = self.search(next_s, deepcopy(history), sign, n + 1)
 
         if self.Qsa.get((s, best_move), None) is not None:
             self.Qsa[(s, best_move)] = (
@@ -156,4 +164,31 @@ class MCTS:
             self.Nsa[(s, best_move)] = 1
 
         self.Ns[s] += 1
-        return -value
+        return sign * value  # DEBUG this!
+
+
+class dotdict(dict):
+    def __getattr__(self, name):
+        return self[name]
+
+
+class MCTSbot:
+    def __init__(
+        self,
+        game,
+        nnet,
+        num_sims,
+    ):
+        self.mcts = MCTS(
+            game,
+            nnet,
+            args=dotdict(
+                {
+                    "num_MCTS_sims": num_sims,  # Number of games moves for MCTS to simulate
+                    "cpuct": 1,
+                }
+            ),
+        )
+
+    def make_move(self, gamestate, history=[]):
+        return self.mcts.highest_prob_move(gamestate, history)

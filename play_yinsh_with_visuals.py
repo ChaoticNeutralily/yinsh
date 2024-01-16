@@ -274,16 +274,16 @@ def main():
         print(player_data)
     except:
         player_data = {}
-    player_data = new_bot_data_entry(p1, player_data, overwrite=False)
-    player_data = new_bot_data_entry(p2, player_data, overwrite=False)
+    # player_data = new_bot_data_entry(p1, player_data, overwrite=False)
+    # player_data = new_bot_data_entry(p2, player_data, overwrite=False)
 
     bot1 = get_bot(p1, 0)
     bot2 = get_bot(p2, 1)
 
-    elo1 = player_data[p1]["full_elo"]
-    elo2 = player_data[p2]["full_elo"]
-    print(f"{p1}: elo = {elo1}")
-    print(f"{p2}: elo = {elo2}")
+    # elo1 = player_data[p1]["full_elo"]
+    # elo2 = player_data[p2]["full_elo"]
+    # print(f"{p1}: elo = {elo1}")
+    # print(f"{p2}: elo = {elo2}")
     winner = play_game(
         bot1,
         bot2,
@@ -291,7 +291,7 @@ def main():
         # elo1, # not implemented drawn elo yet.
         # elo2,
     )
-    update_score_information(p1, p2, winner, player_data)
+    # update_score_information(p1, p2, winner, player_data)
 
 
 if __name__ == "__main__":
