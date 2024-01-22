@@ -28,6 +28,17 @@ BOARD_TENSOR_SIZE = 4 * len(COORDS)  # copy of board for p1, p2 markers, p1,p2 r
 # if 2d, would be 11 x 11
 
 
+def yinsh_exp_adjacency_tensor():
+    def adjacent(xy, xy2):
+        return (xy[0] - xy2[0]) ** 2 + (xy[1] - xy2[1]) ** 2 == 1 or (
+            (xy[0] - xy2[0]) == 1 and (xy[1] - xy2[1]) == 1
+        )
+
+    mat = np.array([[1.0 if adjacent(p, q) else 0.0 for q in COORDS] for p in COORDS])
+
+    return torch.matrix_exp(torch.Tensor(mat)), torch.Tensor(mat)  # exp adj, adjacency
+
+
 @cache
 def rot_60deg_clockwise(coord):
     """Multiply coord vec by
@@ -67,8 +78,17 @@ def transform_matrix(rotations, reflections):
 
 
 # @lru_cache(maxsize=12 * 3 * 100)
-def transform_coord_list(coord_list, rotations, reflections):
+def transform_coord_list(coord_list, rotations, reflections, sort_coords=False):
     if coord_list:
+        if sort_coords:
+            return sorted(
+                [
+                    tuple(t)
+                    for t in (
+                        np.array(coord_list) @ transform_matrix(rotations, reflections)
+                    )
+                ]
+            )
         return [
             tuple(t)
             for t in (np.array(coord_list) @ transform_matrix(rotations, reflections))
@@ -76,42 +96,48 @@ def transform_coord_list(coord_list, rotations, reflections):
     return []
 
 
-def board_symmetry(board, rotations, reflections):
+def board_symmetry(board, rotations, reflections, sort_coords=False):
     return GameBoard(
         elements={
             apply_coord_transform(coord, rotations, reflections): element
             for coord, element in board.elements.items()
         },
         rings=[
-            transform_coord_list(board.rings[0], rotations, reflections),
-            transform_coord_list(board.rings[1], rotations, reflections),
+            transform_coord_list(board.rings[0], rotations, reflections, sort_coords),
+            transform_coord_list(board.rings[1], rotations, reflections, sort_coords),
         ],
         markers=[
-            transform_coord_list(board.markers[0], rotations, reflections),
-            transform_coord_list(board.markers[1], rotations, reflections),
+            transform_coord_list(board.markers[0], rotations, reflections, sort_coords),
+            transform_coord_list(board.markers[1], rotations, reflections, sort_coords),
         ],
     )
 
 
-def game_state_symmetry(game_state, rotations, reflections):
+def game_state_symmetry(game_state, rotations, reflections, sort_coords=False):
     if game_state.turn_type != "remove run":
-        vm = transform_coord_list(game_state.valid_moves, rotations, reflections)
+        vm = transform_coord_list(
+            game_state.valid_moves, rotations, reflections, sort_coords
+        )
     else:
         vm = [
-            transform_coord_list(m, rotations, reflections)
+            sorted(
+                transform_coord_list(m, rotations, reflections),
+                key=lambda xy: xy[0] * 10 + xy[1],
+            )
             for m in game_state.valid_moves
         ]
     return GameState(
         game_state.turn_type,
         game_state.active_player,
-        board_symmetry(game_state.board, rotations, reflections),
+        board_symmetry(game_state.board, rotations, reflections, sort_coords),
         game_state.points,
         game_state.points_to_win,
-        vm,  # unsorted
+        vm,
         game_state.last_moved,
         apply_coord_transform(game_state.prev_ring, rotations, reflections),
         game_state.max_markers_before_draw,
         game_state.terminal,
+        game_state.turn,
     )
 
 
@@ -140,6 +166,19 @@ def get_symmetries(game_state, history, probabilities):
     return symmetries
 
 
+def get_state_symmetries(game_state):
+    """Return a list of equivalent game_state
+
+    It's a hexagon, so the symmetries of the game are the dihedral group of order 12.
+    A rotation of order 6 and a reflection are the generators.
+    """
+    symmetries = []
+    for rot in range(6):
+        for ref in range(2):
+            symmetries.append(game_state_symmetry(game_state, rot, ref, True))
+    return symmetries
+
+
 def binary_tensor_from_list(keys, index_dict) -> torch.Tensor:
     arr_01 = torch.zeros((len(index_dict),))
     for key in keys:
@@ -160,13 +199,13 @@ def value_tensor_from_list(keys, values, index_dict) -> torch.Tensor:
 
 
 class PreprocessGamestateFlat:
-    """Encode the gamestate as a flattened (2 x 87 x T) + 11 dimensional tensor.
+    """Encode the gamestate as a flattened (2 x 85 x T) + 11 dimensional tensor.
 
     example (T, input dim): (1, 185), (2, 359), (3, 533), (4, 707), (5, 881), (6, 1055), (7, 1229), (8, 1403)
     This tensor will be the input to our NN-based yinsh bots.
     T is the number of current and previous boards used as input to the model.
     T=1 only returns the current board with no past boards.
-    Each board is concatenation of 4 binary encodings of size 87 (number of board spaces)
+    Each board is concatenation of 4 binary encodings of size 85 (number of board spaces)
     Could make this an over-full image by making it 11 x 11 and just adding 5 to every coordinate and literally stacking images, but we haven't yet.
     -> player markers - opponent markers
     -> player rings - opponent rings
@@ -216,10 +255,10 @@ class PreprocessGamestateFlat:
         if gs.turn_type == "move ring":
             pr[gs.active_player] = [gs.prev_ring]
 
-        board = torch.cat(self.board_masks(gs.board, pr))  # (87 * 2)-D
+        board = torch.cat(self.board_masks(gs.board, pr))  # (85 * 2)-D
 
         turn_type = self.turn_mask(gs.turn_type)  # 5-D
-        last_moved = torch.Tensor([[1, -1][gs.last_moved]])  # 1-D
+        last_moved = torch.Tensor([[1, -1][gs.active_player == gs.last_moved]])  # 1-D
         points = self.points_tensor(gs.points, gs.active_player)  # 2-D
 
         win_points = torch.Tensor([gs.points_to_win])  # 1-D
@@ -282,7 +321,7 @@ class PreprocessGamestateFlat:
 class PostprocessMoveDistributionFlat:
     """Decode probability distribution Tensor and GameState to probability over valid moves.
 
-    The distribution is over a single board dim = (87,) to say which piece to move.
+    The distribution is over a single board dim = (85,) to say which piece to move.
     When removing runs, the sum of coordinate probabilities of each marker in a run is used.
     """
 
@@ -348,7 +387,7 @@ class YinshNetFlat(nn.Module):
                     nn.Linear(internal_width, internal_width),
                     nn.BatchNorm1d(internal_width),
                     nn.ReLU(),
-                    nn.Dropout(),
+                    nn.Dropout(args.dropout),
                 )
                 for _ in range(args.internal_layers)
             ],
@@ -377,6 +416,175 @@ class YinshNetFlat(nn.Module):
         policy = self.fc_policy(state)
         value = self.fc_value(state)
         return self.probify(policy), self.signify(value)
+
+
+class GRes(nn.Module):
+    """Implement Module of GResNet Graph raw from below paper with batchnorm and dropout
+    https://arxiv.org/pdf/1909.05729.pdf
+    """
+
+    def __init__(self, in_width, out_width, dropout=0):
+        super(GRes, self).__init__()
+        # self.filter = filter  # having this here would mean a ton of duplicated memory, so pass in x prefiltered instead
+        self.lin = nn.Linear(in_width, out_width)
+        self.bn = nn.BatchNorm1d(out_width)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, filtered_x, residual=None):
+        if residual is not None:
+            return self.dropout(self.relu(residual + self.bn(self.lin(filtered_x))))
+        return self.dropout(self.relu(self.bn(self.lin(filtered_x))))
+
+
+class YinshNetGraph(nn.Module):
+    """implement a graph resnet on the yinsh board"""
+
+    def __init__(self, args):
+        super(YinshNetGraph, self).__init__()
+        self.preprocessing = PreprocessGamestateFlat(args.history_length)
+        self.postprocessing = PostprocessMoveDistributionFlat()
+        self.input_size = self.preprocessing.full_tensor(GameState(), []).numel()
+        self.action_size = len(COORDS)
+        internal_width = int(self.input_size)
+        external_width = int(self.input_size) - len(COORDS)
+        # network structure
+        self.fc_layers_double = nn.ModuleList(
+            [
+                GRes(
+                    self.input_size,
+                    internal_width,
+                    args.dropout,
+                )
+            ]
+            + [
+                GRes(
+                    internal_width,
+                    internal_width,
+                    args.dropout,
+                )
+                for _ in range(args.internal_layers_doubled - 1)
+            ]
+        )
+        self.transition = GRes(
+            internal_width,
+            external_width,
+            args.dropout,
+        )
+        self.fc_layers_single = nn.ModuleList(
+            [
+                GRes(
+                    external_width,
+                    external_width,
+                    args.dropout,
+                )
+                for _ in range(args.internal_layers_singled)
+            ]
+        )
+        # Graph convolution matrices
+        exp_adj, adj = yinsh_exp_adjacency_tensor()
+
+        if args.filter == "exp":
+            mat = exp_adj
+        else:
+            mat = adj + torch.eye(len(COORDS))
+        mat = torch.cat((mat, mat), dim=0)
+        mat = torch.cat((mat, mat), dim=1)
+        D_minus_half = torch.diagflat(1 / torch.sqrt(torch.sum(mat, dim=1)))
+        D_minus_half_single = torch.diagflat(
+            1 / torch.sqrt(torch.sum(mat[: len(COORDS), : len(COORDS)], dim=1))
+        )
+
+        # normalized graph convolution filter from https://arxiv.org/pdf/1609.02907.pdf
+        self.filter_double_graph = torch.eye(max([self.input_size, internal_width]))
+        self.filter_double_graph[: len(COORDS) * 2, : len(COORDS) * 2] = (
+            D_minus_half @ mat @ D_minus_half
+        ).t()
+        self.filter_double_graph = self.filter_double_graph.to(torch.device(args.gpu))
+        # normalized graph convolution filter from https://arxiv.org/pdf/1609.02907.pdf
+        self.filter_single_graph = torch.eye(external_width)
+        self.filter_single_graph[: len(COORDS), : len(COORDS)] = (
+            D_minus_half_single
+            @ mat[: len(COORDS), : len(COORDS)]
+            @ D_minus_half_single
+        ).t()
+        self.filter_single_graph = self.filter_single_graph.to(torch.device(args.gpu))
+        self.fc_policy = nn.Linear(external_width, self.action_size)
+        self.fc_valid = nn.Linear(external_width, self.action_size)
+        self.probify = nn.Softmax(dim=-1)  # squish into (0,1)
+
+        self.maskify = nn.Sigmoid()  # squish into (0,1)
+
+        self.fc_value = nn.Linear(external_width, 1)
+        self.signify = nn.Tanh()  # squish into (-1,1)
+
+    def preprocess(self, game_state: GameState, history):
+        """Convert gamestate to a tensor"""
+        return self.preprocessing.full_tensor(game_state, history)
+
+    def postprocess(self, policy, valid_moves):
+        return self.postprocessing.valid_move_distribution(policy, valid_moves)
+
+    def forward(self, state: torch.Tensor):
+        state = state.view(-1, self.input_size)
+        residual_double = torch.matmul(state, self.filter_double_graph)
+        s_state = torch.clone(state[:, len(COORDS) :])
+        s_state[:, : len(COORDS)] += state[:, : len(COORDS)]
+
+        residual_single = torch.matmul(s_state, self.filter_single_graph)
+        for layer in self.fc_layers_double:
+            state = layer(
+                torch.matmul(state, self.filter_double_graph), residual_double
+            )
+        state = self.transition(
+            torch.matmul(state, self.filter_double_graph), residual_single
+        )
+        for layer in self.fc_layers_single:
+            state = layer(
+                torch.matmul(state, self.filter_single_graph), residual_single
+            )
+        policy = self.fc_policy(state)
+        valid = self.maskify(self.fc_valid(state))
+        value = self.fc_value(state)
+        return self.probify(policy * valid), self.signify(value), valid
+
+    # def train(self, examples):
+    #     """
+    #     This function trains the neural network with examples obtained from
+    #     self-play.
+
+    #     Input:
+    #         examples: a list of training examples, where each example is of form
+    #                   (board, pi, v). pi is the MCTS informed policy vector for
+    #                   the given board, and v is its value. The examples has
+    #                   board in its canonical form.
+    #     """
+    #     pass
+
+    # def predict(self, board):
+    #     """
+    #     Input:
+    #         board: current board in its canonical form.
+
+    #     Returns:
+    #         pi: a policy vector for the current board- a numpy array of length
+    #             game.getActionSize
+    #         v: a float in [-1,1] that gives the value of the current board
+    #     """
+    #     pass
+
+    # def save_checkpoint(self, folder, filename):
+    #     """
+    #     Saves the current neural network (with its parameters) in
+    #     folder/filename
+    #     """
+    #     pass
+
+    # def load_checkpoint(self, folder, filename):
+    #     """
+    #     Loads parameters of the neural network from folder/filename
+    #     """
+    #     pass
 
     # def train(self, examples):
     #     """
@@ -428,15 +636,15 @@ class YinshNetFlat(nn.Module):
 
 # class PreprocessGamestate2D:
 #     # TODO: This is still the old flat one
-#     """Encode the gamestate as a flattened (4 x 87 x T) + 10 dimensional tensor.
+#     """Encode the gamestate as a flattened (4 x 85 x T) + 10 dimensional tensor.
 
 #     total input dim: T=8: 2794, T=4: 1402, T=3: 1054, T=2: 706, T=1: 358
 #     This tensor will be the input to our NN-based yinsh bots.
 #     T is the number of current and previous boards used as input to the model.
 #     T=1 only returns the current board with no past boards.
-#     Each board is concatenation of 4 binary encodings of size 87 (number of board spaces)
+#     Each board is concatenation of 4 binary encodings of size 85 (number of board spaces)
 #     Could make this an over-full image by making it 11 x 11 and just adding 5 to every coordinate and literally stacking images, but we haven't yet.
-#     That would add a ton of useless dimensionality since 121 >> 87 and all of those extra dimensions would be masked out every time.
+#     That would add a ton of useless dimensionality since 121 >> 85 and all of those extra dimensions would be masked out every time.
 #     -> player markers
 #     -> opponent markers
 #     -> player rings
@@ -482,7 +690,7 @@ class YinshNetFlat(nn.Module):
 #         return torch.Tensor([points[player], points[1 - player]])
 
 #     def game_state_to_tensors(self, gs: GameState) -> Tuple:
-#         board0 = torch.cat(board_masks(gs.board, 0))  # (87 * 4)-D
+#         board0 = torch.cat(board_masks(gs.board, 0))  # (85 * 4)-D
 #         board1 = torch.cat(
 #             board_masks(gs.board, 1)
 #         )  # only one of the two boards is used

@@ -22,6 +22,7 @@ from torch.cuda import is_available as cuda_is_available
 from yinsh import YinshGame
 from alphazero.coach import Coach
 from alphazero.nn_utils import YinshNetFlat as flat_nn
+from alphazero.nn_utils import YinshNetGraph as graph_nn
 from alphazero.yinsh_nnet import YinshNetWrapper as nn
 
 
@@ -38,16 +39,19 @@ class dotdict(dict):
 net_args = dotdict(
     {
         "lr": 0.001,
-        "dropout": 0.3,
-        "epochs": 100,
-        "batch_size": 1024,  # 512,
+        "dropout": 0.0,
+        "epochs": 500,
+        "batch_size": 256,  # 512,
         "weight_decay": 0.01,
         "gpu": "mps",  # [False, "mps", "cuda"]
-        "internal_width": 256,
-        "internal_layers": 2,
-        "external_width": 128,
+        # "internal_width": 256,
+        # "internal_layers": 2,
+        "internal_layers_doubled": 2,
+        "internal_layers_singled": 2,
+        # "external_width": 128,
         "history_length": 1,
         "show_dummy_loss": True,
+        "filter": "exp",
     }
 )
 
@@ -62,8 +66,8 @@ args = dotdict(
         "num_MCTS_sims": 800,  # Number of games moves for MCTS to simulate.
         "num_arena_games": 40,  # 40 Number of games to play during arena play to determine if new net will be accepted.
         "cpuct": 1,
-        "checkpoint": f"checkpoints/{net_args.history_length}x{net_args.internal_layers}x{net_args.internal_width}x{net_args.external_width}/",
-        "load_model": True,
+        "checkpoint": f"checkpoints/graph_{net_args.internal_layers_doubled}x{net_args.internal_layers_singled}/",
+        "load_model": False,
         "load_examples": True,
         "skip_first_self_play": True,
         "skip_first_training": False,  # not yet implemented
@@ -71,8 +75,9 @@ args = dotdict(
             f"checkpoint/",
             # f"checkpoints/{net_args.history_length}x{net_args.internal_layers}x{net_args.internal_width}x{net_args.external_width}/",
             "checkpoint.pth.tar",  # model file
-            f"checkpoints/{net_args.history_length}x{net_args.internal_layers}x{net_args.internal_width}x{net_args.external_width}/",
-            "checkpoint_23.pth.tar",  # examples checkpoint
+            # f"checkpoints/{net_args.history_length}x{net_args.internal_layers}x{net_args.internal_width}x{net_args.external_width}/",
+            f"checkpoints/graph_{net_args.internal_layers_doubled}x{net_args.internal_layers_singled}/",
+            "checkpoint_0.pth.tar",  # examples checkpoint
         ),
         "num_iters_for_train_examples_history": 20,
     }
@@ -81,7 +86,7 @@ args = dotdict(
 
 def main():
     log.info("Loading %s...", nn.__name__)
-    nnet = nn(flat_nn, net_args)
+    nnet = nn(graph_nn, net_args)
 
     if args.load_model:
         log.info(

@@ -1,8 +1,11 @@
 from copy import deepcopy
+from functools import cache
+from lru import LRU
 import numpy as np
 from typing import Callable
 
 from yinsh import GameState, YinshGame, connected, get_points_between, coords
+from alphazero.nn_utils import get_state_symmetries
 
 BIG_NUMBER = (2**31) - 1
 EPS = 1e-5
@@ -21,6 +24,12 @@ def terminal_value(points):
     return np.sign(points[0] - points[1])
 
 
+def proper_move_type(move, reference_move):
+    if type(reference_move) == tuple:
+        return tuple(move)
+    return [tuple(coord) for coord in move]
+
+
 class FixedDepthMiniMaxTreePlayer:
     """Player that searches the game tree and picks the minimax optimal move according to heuristic value."""
 
@@ -30,36 +39,51 @@ class FixedDepthMiniMaxTreePlayer:
         depth,
         estimate_value: Callable[[GameState], float],
         opening_depth=1,
-        ab=True,
+        pruning="ab",  # also can be "scout",
+        opening_estimate_value=None,
+        opening_threshold=3,
     ):
         self.rng = np.random.default_rng()
         self.player = player_number
         self.estimate_value = estimate_value
         self.max_depth = depth
         self.opening_depth = opening_depth
-        self.ab = ab
+        self.pruning = pruning
+        if opening_estimate_value is None:
+            self.opening_value = estimate_value
+        else:
+            self.opening_value = opening_estimate_value
+        self.transposition_table = LRU(2**20)
+        self.opening_threshold = opening_threshold
 
     def sort_moves(self, game_state):
         if game_state.turn_type != "remove run":
-            return sorted(game_state.valid_moves, key=norm2)
+            return sorted(
+                game_state.valid_moves, key=lambda m: len(num_rconnections(m))
+            )
         return game_state.valid_moves
 
-    def negamax(self, game_state, depth, player_sign):
-        if game_state.terminal or depth == 0:
-            return player_sign * self.estimate_value(game_state)
-        value = -float("inf")
-        moves = self.sort_moves(game_state)
-        for move in moves:
-            g = YinshGame(deepcopy(game_state))
-            g.take_turn(move)
-            value = max(
-                [value, -self.negamax(g.get_game_state(), depth - 1, -player_sign)]
-            )
-        return value
+    def sorted_children(self, game_state, depth):
+        children = [
+            YinshGame.get_next_game_state(deepcopy(game_state), move)
+            for move in game_state.valid_moves
+        ]
+        return sorted(
+            children,
+            key=lambda child_state: self.transposition_table.get(
+                (
+                    str(child_state),
+                    child_state.turn,
+                    depth - 1,
+                ),
+                0,
+            ),
+            reverse=True,
+        )
 
-    def negamax_ab_prune(self, game_state, depth, a, b, player_sign):
+    def negamax(self, game_state, depth, player_sign, estimate):
         if game_state.terminal or depth == 0:
-            return player_sign * self.estimate_value(game_state)
+            return player_sign * estimate(game_state)
         value = -float("inf")
         moves = self.sort_moves(game_state)
         for move in moves:
@@ -70,44 +94,179 @@ class FixedDepthMiniMaxTreePlayer:
                 [
                     value,
                     sign_mult
-                    * self.negamax_ab_prune(
-                        g.get_game_state(),
+                    * self.negamax(
+                        g.get_game_state(), depth - 1, sign_mult * player_sign, estimate
+                    ),
+                ]
+            )
+        return value
+
+    def negamax_ab_prune(self, game_state, depth, a, b, player_sign, estimate):
+        a0 = a
+
+        # use cache for game_state
+        entry = self.transposition_table.get(
+            (str(game_state), game_state.active_player), False
+        )
+        if entry and entry["depth"] >= depth:
+            if entry["flag"] == "Exact":
+                return entry["value"]
+            elif entry["flag"] == "Lower":
+                a = max(a, entry["value"])
+            elif entry["flag"] == "Upper":
+                b = min(b, entry["value"])
+            if a >= b:
+                return entry["value"]
+
+        if game_state.terminal or depth == 0:
+            return player_sign * estimate(game_state)
+
+        children = self.sorted_children(game_state, depth)
+        value = -float("inf")
+        for child in children:
+            sign_mult = [1, -1][child.active_player != game_state.active_player]
+            state_value = self.negamax_ab_prune(
+                child,
+                depth - 1,
+                sign_mult * b,
+                sign_mult * a,
+                sign_mult * player_sign,
+                estimate,
+            )
+            value = max([value, sign_mult * state_value])
+            a = max([a, value])
+            if a >= b:
+                break
+
+        # store new node in cache
+        if value <= a0:
+            flag = "Upper"
+        elif value >= b:
+            flag = "Lower"
+        else:
+            flag = "Exact"
+        self.transposition_table[(str(game_state), game_state.active_player)] = {
+            "value": value,
+            "depth": depth,
+            "flag": flag,
+        }
+        return value
+
+    def negascout(self, game_state, depth, a, b, player_sign, estimate):
+        a0 = a
+
+        # use cache for game_state
+        entry = self.transposition_table.get(
+            (str(game_state), game_state.active_player), False
+        )
+        if entry and entry["depth"] >= depth:
+            if entry["flag"] == "Exact":
+                return entry["value"]
+            elif entry["flag"] == "Lower":
+                a = max(a, entry["value"])
+            elif entry["flag"] == "Upper":
+                b = min(b, entry["value"])
+            if a >= b:
+                return entry["value"]
+
+        if game_state.terminal or depth == 0:
+            return player_sign * estimate(game_state)
+
+        children = self.sorted_children(game_state, depth)
+        value = -float("inf")
+        for i, child in enumerate(children):
+            sign_mult = [1, -1][child.active_player != game_state.active_player]
+            if i == 0:
+                state_value = sign_mult * self.negascout(
+                    child,
+                    depth - 1,
+                    sign_mult * b,
+                    sign_mult * a,
+                    sign_mult * player_sign,
+                    estimate,
+                )
+            else:
+                state_value = sign_mult * self.negascout(
+                    child,
+                    depth - 1,
+                    sign_mult * a - 1,
+                    sign_mult * a,
+                    sign_mult * player_sign,
+                    estimate,
+                )
+                if a < state_value and state_value < b:
+                    state_value = sign_mult * self.negascout(
+                        child,
                         depth - 1,
                         sign_mult * b,
                         sign_mult * a,
                         sign_mult * player_sign,
-                    ),
-                ]
-            )
+                        estimate,
+                    )
+            value = max([value, state_value])
             a = max([a, value])
             if a >= b:
                 break
+
+        # store new node in cache
+        if value <= a0:
+            flag = "Upper"
+        elif value >= b:
+            flag = "Lower"
+        else:
+            flag = "Exact"
+        self.transposition_table[(str(game_state), game_state.active_player)] = {
+            "value": value,
+            "depth": depth,
+            "flag": flag,
+        }
         return value
 
     def get_move_values(self, moves, game_state):
         if (
             game_state.turn_type == "setup new rings"
-            and len(game_state.board.rings[game_state.active_player]) <= 3
+            and len(game_state.board.rings[game_state.active_player])
+            <= self.opening_threshold
         ):
             depth = self.opening_depth
+            estimate = self.opening_value
         elif (
             game_state.turn_type == "setup new rings"
-            and len(game_state.board.rings[game_state.active_player]) == 4
+            and len(game_state.board.rings[game_state.active_player])
+            == self.opening_threshold + 1
         ):
             depth = self.opening_depth + 1
+            estimate = self.opening_value
         else:
             depth = self.max_depth
+            estimate = self.estimate_value
         values = np.zeros((len(moves),))
         for i, move in enumerate(moves):
             g = YinshGame(deepcopy(game_state))
             g.take_turn(move)
             player_sign = [1, -1][self.player]
-            if self.ab:
+            if self.pruning == "ab":
                 values[i] = self.negamax_ab_prune(
-                    g.get_game_state(), depth, -float("inf"), float("inf"), player_sign
+                    g.get_game_state(),
+                    depth,
+                    -float("inf"),
+                    float("inf"),
+                    player_sign,
+                    estimate,
+                )
+            elif self.pruning == "scout":
+                values[i] = self.negascout(
+                    g.get_game_state(),
+                    depth,
+                    -float("inf"),
+                    float("inf"),
+                    player_sign,
+                    estimate,
                 )
             else:
-                values[i] = self.negamax(g.get_game_state(), depth, player_sign)
+                values[i] = self.negamax(
+                    g.get_game_state(), depth, player_sign, estimate
+                )
         return values
 
     def make_move(self, game_state):
@@ -133,17 +292,15 @@ class FixedDepthMiniMaxTreePlayer:
         move = moves[self.rng.choice(max_inds)]
 
         # print(sorted(values))
-        if type(game_state.valid_moves[0]) == tuple:
-            return tuple(move)
-        else:
-            return [tuple(coord) for coord in move]
+        return proper_move_type(move, game_state.valid_moves[0])
         # else:
         #     print("empty values")
         #     print(game_state)
         #     return
 
 
-def num_ring_connections(game, rings) -> int:
+@cache
+def num_rconnections(ring) -> set:
     """Return number of coordinates on lines from rings.
 
     ring heuristic: number of coords in line with >= 1 player ring
@@ -153,11 +310,16 @@ def num_ring_connections(game, rings) -> int:
     """
     connections = set()
     for c in coords:
-        for r in rings:
-            if connected(c, r):
-                connections.add(c)
-                break
-    return len(connections)
+        if connected(c, ring):
+            connections.add(c)
+    return connections
+
+
+def num_ring_connections(game, rings):
+    cons = set()
+    for r in rings:
+        cons = cons.union(num_rconnections(tuple(r)))
+    return len(cons)
 
 
 def markers_between(game, start, end) -> int:
@@ -253,4 +415,4 @@ def floyd_estimate(
     def player_value(player):
         return value_points(player) + value_markers(player) + value_rings(player)
 
-    return player_value(0) - player_value(1)
+    return (player_value(0) - player_value(1)) * (0.999**game_state.turn)

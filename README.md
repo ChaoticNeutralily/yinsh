@@ -1,12 +1,13 @@
 # A pygame implementation of the game yinsh
+
 Yinsh is a two player abstract strategy game by Kris Burm as part of the project GIPF.
-https://www.gipf.com/yinsh/
+<https://www.gipf.com/yinsh/>
 Here, I have a pygame implementation of a visual interface to play yinsh either with two players using a mouse, one player using a mouse against a bot, or to watch two bots play against one another.
 <p align="center">
   <img width="506" alt="A screenshot of the pygame yinsh implementation during a game with moves for player 1 highlighted. " src="https://github.com/ChaoticNeutralily/yinsh/assets/156118924/f00fff10-ee86-40fa-b8a3-a96cd0591cdc">
 </p>
 
-My initial implementation of the game logic is a python port of the haskell implementation by David Peter at https://github.com/sharkdp/yinsh
+My initial implementation of the game logic is a python port of the haskell implementation by David Peter at <https://github.com/sharkdp/yinsh>
 This repo also has various yinsh bots I've been working on to practice making game playing agents.
 The initial tree search bots also use ports of the heuristics on David Peter's version.
 I've since started adding more heuristics, and am currently working on MCTS based bots, and neural net value/policy bots.
@@ -25,7 +26,7 @@ I've since started adding more heuristics, and am currently working on MCTS base
 - [x] implement performance Elo
 - [x] implement glicko2
   - [ ] to run correctly, requires saving separate win/loss/draw arrays for current scoring timeframe versus all time.
-- [x] implement I/O for automatic ranking updates. 
+- [x] implement I/O for automatic ranking updates.
 - [ ] have the visual version keep track of gamestates to allow undos for casual play
 - [ ] implement time control
   - [ ] could just use python time library and just count up time used.
@@ -47,6 +48,7 @@ Or, more complicated use
   - [x] implement floyd bot from David Peter's site
     - [x] find cause of difference in floyd behavior during openings.
       - function to get move values didn't actually make the move it was checking, so all moves valued the same board state. big oof
+    - [ ] fix new connections bug
   - [ ] transposition table
     - [ ] rewrite the floyd heuristics to just take a board instance
   - [ ] hp tuning / BO to find best weight of basic heuristics and apply the weighted sum as a bot

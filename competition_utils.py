@@ -54,7 +54,10 @@ bot_list = [
     "markers",
     "floyd_d=2",
     "negative_floyd",
-    "alphazero_checkpoint",
+    "cfloyd",
+    "floyd4",
+    "cfloyd4"
+    # "alphazero_checkpoint",
 ]
 
 
@@ -66,6 +69,86 @@ def get_bot(kind_of_player: str, player):
         return UniformRandomPlayer()
     elif kind_of_player == "floyd":
         return FixedDepthMiniMaxTreePlayer(player, depth, floyd_estimate, start_depth)
+    elif kind_of_player == "cfloyd":
+
+        def opening(game_state):
+            return floyd_estimate(game_state, ring_heuristic=num_ring_connections)
+
+        return FixedDepthMiniMaxTreePlayer(
+            player,
+            depth=depth,
+            estimate_value=floyd_estimate,
+            opening_depth=start_depth,
+            pruning="ab",  # also can be "scout",
+            opening_estimate_value=opening,
+        )
+    elif kind_of_player == "floyd4":
+        return FixedDepthMiniMaxTreePlayer(
+            player,
+            depth=4,
+            estimate_value=floyd_estimate,
+            opening_depth=3,
+            pruning="scout",
+        )
+    elif kind_of_player == "cfloyd4":
+
+        def opening(game_state):
+            return floyd_estimate(game_state, ring_heuristic=num_ring_connections)
+
+        return FixedDepthMiniMaxTreePlayer(
+            player,
+            depth=4,
+            estimate_value=floyd_estimate,
+            opening_depth=3,
+            pruning="scout",  # also can be "scout",
+            opening_estimate_value=opening,
+        )
+    elif kind_of_player == "floyd5":
+        return FixedDepthMiniMaxTreePlayer(
+            player,
+            depth=5,
+            estimate_value=floyd_estimate,
+            opening_depth=3,
+            pruning="scout",
+            opening_threshold=4,
+        )
+    elif kind_of_player == "cfloyd5":
+
+        def opening(game_state):
+            return floyd_estimate(game_state, ring_heuristic=num_ring_connections)
+
+        return FixedDepthMiniMaxTreePlayer(
+            player,
+            depth=5,
+            estimate_value=floyd_estimate,
+            opening_depth=3,
+            pruning="scout",  # also can be "scout",
+            opening_estimate_value=opening,
+            opening_threshold=4,
+        )
+    elif kind_of_player == "floyd6":
+        return FixedDepthMiniMaxTreePlayer(
+            player,
+            depth=6,
+            estimate_value=floyd_estimate,
+            opening_depth=3,
+            pruning="scout",
+            opening_threshold=4,
+        )
+    elif kind_of_player == "cfloyd6":
+
+        def opening(game_state):
+            return floyd_estimate(game_state, ring_heuristic=num_ring_connections)
+
+        return FixedDepthMiniMaxTreePlayer(
+            player,
+            depth=6,
+            estimate_value=floyd_estimate,
+            opening_depth=3,
+            pruning="scout",  # also can be "scout",
+            opening_estimate_value=opening,
+            opening_threshold=4,
+        )
     elif kind_of_player == "floyd_combined":
 
         def estimate(game_state):

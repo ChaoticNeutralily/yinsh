@@ -73,17 +73,18 @@ class YinshNetWrapper:
         self.value_loss = nn.MSELoss()
         self.history_length = args.history_length
         self.relu = nn.ReLU()
+        self.valid_policy_loss = nn.NLLLoss()
 
     def policy_loss(self, policy, target):
         policy = torch.log(policy)
         return -torch.mean(torch.flatten(policy) * torch.flatten(target))
 
-    def valid_policy_loss(self, policy, mask):  # uniform_valid_policy):
-        # return square of invalid entries
-        return torch.mean(torch.flatten((policy * mask) ** 2))
-        # + torch.mean(
-        #     torch.flatten(self.relu(EPS - policy[uniform_valid_policy > 0]) ** 2)
-        # )
+    # def valid_policy_loss(self, policy, mask):  # uniform_valid_policy):
+    #     # return square of invalid entries
+    #     return torch.mean(torch.flatten((policy * mask) ** 2))
+    #     # + torch.mean(
+    #     #     torch.flatten(self.relu(EPS - policy[uniform_valid_policy > 0]) ** 2)
+    #     # )
 
     def train(self, examples):
         """
@@ -131,7 +132,7 @@ class YinshNetWrapper:
                         np.ones((len(game_states[i].valid_moves),)),
                         game_states[i].valid_moves,
                     )  # uniform policy over valid moves
-                valid_mask = (uniform_valid_policies == 0).type_as(target_policies)
+                valid_mask = (uniform_valid_policies == 0).int()
                 # policy_mask = torch.sign(uniform_valid_policies)
                 # invalid_policy_mask = 1 - policy_mask
                 if self.args.show_dummy_loss:
@@ -181,15 +182,17 @@ class YinshNetWrapper:
                     )
 
                 # compute output
-                out_policies, out_values = self.nnet(game_states_tensor)
+                out_policies, out_values, out_valid = self.nnet(game_states_tensor)
                 l_policy = self.policy_loss(
                     out_policies, target_policies.reshape(out_policies.shape)
                 )
-                l_valid_policy = self.valid_policy_loss(out_policies, valid_mask)
+                l_valid_policy = self.valid_policy_loss(
+                    torch.stack((out_valid, 1 - out_valid), dim=1), valid_mask
+                )
                 l_value = self.value_loss(
                     out_values, target_values.reshape(out_values.shape)
                 )
-                total_loss = l_policy + l_value + 0.1 * l_valid_policy
+                total_loss = 0 + l_policy + l_value + 0.01 * l_valid_policy
 
                 # record loss
                 policy_losses.update(l_policy.item(), game_states_tensor.size(0))

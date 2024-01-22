@@ -139,6 +139,12 @@ class GameState:
     prev_ring: Tuple[int, int] = (0, 0)
     max_markers_before_draw: int = MAX_MARKERS
     terminal: bool = False
+    turn: int = 0
+
+    def prev_ring_str(self):
+        if self.turn_type == "move_ring":
+            return str(self.prev_ring)
+        return ""
 
     def __repr__(self):
         """String of a canonical rep of the game."""
@@ -157,7 +163,7 @@ class GameState:
                 [
                     self.board.rings[self.active_player],
                     self.board.rings[1 - self.active_player],
-                    self.prev_ring,
+                    self.prev_ring_str(),
                 ]
             )
             + str(
@@ -176,14 +182,15 @@ class YinshGame:
             game_state = GameState()
         self.turn_type: str = game_state.turn_type
         self.active_player: int = game_state.active_player
-        self.board: GameBoard = game_state.board
-        self.points: List[int] = game_state.points
+        self.board: GameBoard = deepcopy(game_state.board)
+        self.points: List[int] = deepcopy(game_state.points)
         self.points_to_win: int = game_state.points_to_win
-        self.valid_moves: List = game_state.valid_moves
+        self.valid_moves: List = deepcopy(game_state.valid_moves)
         self.last_moved: int = game_state.last_moved
         self.prev_ring: Tuple[int, int] = game_state.prev_ring
         self.max_markers_before_draw: int = game_state.max_markers_before_draw
         self.terminal: bool = game_state.terminal
+        self.turn: int = game_state.turn
 
     def get_game_state(self):
         return deepcopy(
@@ -198,6 +205,7 @@ class YinshGame:
                 self.prev_ring,
                 self.max_markers_before_draw,
                 self.is_terminal(),
+                self.turn,
             )
         )
 
